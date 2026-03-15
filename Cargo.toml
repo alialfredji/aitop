@@ -1,9 +1,15 @@
 [package]
 name = "aitop"
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 description = "btop for AI — terminal dashboard for token usage and costs"
 license = "MIT"
+repository = "https://github.com/bugkill3r/aitop"
+homepage = "https://github.com/bugkill3r/aitop"
+readme = "README.md"
+keywords = ["ai", "terminal", "dashboard", "claude", "tui"]
+categories = ["command-line-utilities", "visualization"]
+exclude = [".github/", ".claude/", "docs/", "npm/", "homebrew/"]
 
 [dependencies]
 ratatui = "0.29"

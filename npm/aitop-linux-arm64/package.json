@@ -1,0 +1,13 @@
+{
+  "name": "@aitop/linux-arm64",
+  "version": "0.2.0",
+  "description": "aitop binary for Linux ARM64",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bugkill3r/aitop.git"
+  },
+  "os": ["linux"],
+  "cpu": ["arm64"],
+  "files": ["bin/aitop"]
+}

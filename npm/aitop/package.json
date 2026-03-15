@@ -1,0 +1,24 @@
+{
+  "name": "aitop",
+  "version": "0.2.0",
+  "description": "btop for AI — terminal dashboard for token usage and costs",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bugkill3r/aitop.git"
+  },
+  "homepage": "https://github.com/bugkill3r/aitop",
+  "keywords": ["ai", "terminal", "dashboard", "claude", "tui", "token", "cost"],
+  "bin": {
+    "aitop": "bin/aitop"
+  },
+  "scripts": {
+    "postinstall": "node install.js"
+  },
+  "optionalDependencies": {
+    "@aitop/darwin-arm64": "0.2.0",
+    "@aitop/darwin-x64": "0.2.0",
+    "@aitop/linux-x64": "0.2.0",
+    "@aitop/linux-arm64": "0.2.0"
+  }
+}

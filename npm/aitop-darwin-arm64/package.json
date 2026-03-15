@@ -1,0 +1,13 @@
+{
+  "name": "@aitop/darwin-arm64",
+  "version": "0.2.0",
+  "description": "aitop binary for macOS ARM64",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bugkill3r/aitop.git"
+  },
+  "os": ["darwin"],
+  "cpu": ["arm64"],
+  "files": ["bin/aitop"]
+}

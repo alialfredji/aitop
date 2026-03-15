@@ -24,14 +24,40 @@ Like `btop` monitors your system resources, `aitop` monitors your AI spend. Buil
 
 ## Install
 
+### Homebrew (macOS & Linux)
+
 ```bash
-cargo install --path .
+brew install bugkill3r/aitop/aitop
 ```
 
-Or build from source:
+### Shell installer
 
 ```bash
-git clone https://github.com/saurabhmishra/aitop.git
+curl -fsSL https://raw.githubusercontent.com/bugkill3r/aitop/master/install.sh | sh
+```
+
+### Cargo
+
+```bash
+cargo install aitop
+```
+
+### npx (one-shot, no install)
+
+```bash
+npx aitop
+```
+
+### GitHub Releases
+
+Download prebuilt binaries from the [Releases](https://github.com/bugkill3r/aitop/releases) page.
+
+> **macOS note:** Unsigned binaries may trigger Gatekeeper. Run `xattr -d com.apple.quarantine aitop` after downloading.
+
+### Build from source
+
+```bash
+git clone https://github.com/bugkill3r/aitop.git
 cd aitop
 cargo build --release
 ./target/release/aitop
