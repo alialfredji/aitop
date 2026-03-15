@@ -3,17 +3,23 @@ use rusqlite::{params, Connection};
 use std::path::Path;
 
 use super::parser::{ParsedMessage, ParsedSession};
+use super::pricing::PricingRegistry;
 use super::scanner::SessionFile;
 
 pub struct Database {
     conn: Connection,
+    pricing: PricingRegistry,
 }
 
 impl Database {
     pub fn open(path: &Path) -> Result<Self> {
+        Self::open_with_pricing(path, PricingRegistry::builtin())
+    }
+
+    pub fn open_with_pricing(path: &Path, pricing: PricingRegistry) -> Result<Self> {
         let conn = Connection::open(path)?;
         conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")?;
-        let db = Database { conn };
+        let db = Database { conn, pricing };
         db.create_tables()?;
         Ok(db)
     }
@@ -197,10 +203,9 @@ impl Database {
                 continue;
             }
             if let Some((session, message)) =
-                super::parser::parse_jsonl_line(line, &file.project)
+                super::parser::parse_jsonl_line(line, &file.project, &self.pricing)
             {
                 if let Some(s) = session {
-                    // Use unchecked since we're in a transaction
                     tx.execute(
                         "INSERT INTO sessions (id, project, started_at, updated_at, model, version)
                          VALUES (?1, ?2, ?3, ?4, ?5, ?6)

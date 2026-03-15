@@ -1,3 +1,4 @@
+pub mod pricing;
 pub mod scanner;
 pub mod parser;
 pub mod db;

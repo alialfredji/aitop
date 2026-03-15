@@ -1,6 +1,9 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
 use std::path::PathBuf;
+
+use crate::data::pricing::ModelPriceConfig;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -12,9 +15,13 @@ pub struct Config {
 
     pub weekly_budget: Option<f64>,
 
-    pub claude_data_dir: Option<String>,
+    #[serde(alias = "claude_data_dir")]
+    pub data_dir: Option<String>,
 
     pub admin_api_key: Option<String>,
+
+    #[serde(default)]
+    pub model_pricing: HashMap<String, ModelPriceConfig>,
 }
 
 fn default_refresh() -> f64 {
@@ -31,8 +38,9 @@ impl Default for Config {
             refresh: default_refresh(),
             theme: default_theme(),
             weekly_budget: None,
-            claude_data_dir: None,
+            data_dir: None,
             admin_api_key: None,
+            model_pricing: HashMap::new(),
         }
     }
 }
@@ -61,8 +69,8 @@ impl Config {
             .join("config.toml")
     }
 
-    pub fn claude_projects_dir(&self) -> PathBuf {
-        if let Some(ref dir) = self.claude_data_dir {
+    pub fn projects_dir(&self) -> PathBuf {
+        if let Some(ref dir) = self.data_dir {
             let expanded = shellexpand(dir);
             PathBuf::from(expanded)
         } else {

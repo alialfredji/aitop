@@ -1,5 +1,7 @@
 use serde::Deserialize;
 
+use super::pricing::PricingRegistry;
+
 #[derive(Debug, Clone)]
 pub struct ParsedMessage {
     pub uuid: String,
@@ -64,30 +66,11 @@ struct CacheCreation {
     ephemeral_5m_input_tokens: Option<i64>,
 }
 
-/// Pricing per million tokens
-fn cost_per_mtok(model: &str) -> (f64, f64, f64, f64) {
-    // (input, output, cache_read, cache_creation)
-    let model_lower = model.to_lowercase();
-    if model_lower.contains("opus") {
-        (15.0, 75.0, 1.50, 18.75)
-    } else if model_lower.contains("haiku") {
-        (0.80, 4.0, 0.08, 1.0)
-    } else {
-        // Default to Sonnet pricing (also covers explicit "sonnet" match)
-        (3.0, 15.0, 0.30, 3.75)
-    }
-}
-
-fn compute_cost(model: &str, input: i64, output: i64, cache_read: i64, cache_creation: i64) -> f64 {
-    let (inp_rate, out_rate, cr_rate, cc_rate) = cost_per_mtok(model);
-    let scale = 1_000_000.0;
-    (input as f64 * inp_rate / scale)
-        + (output as f64 * out_rate / scale)
-        + (cache_read as f64 * cr_rate / scale)
-        + (cache_creation as f64 * cc_rate / scale)
-}
-
-pub fn parse_jsonl_line(line: &str, project: &str) -> Option<(Option<ParsedSession>, Option<ParsedMessage>)> {
+pub fn parse_jsonl_line(
+    line: &str,
+    project: &str,
+    pricing: &PricingRegistry,
+) -> Option<(Option<ParsedSession>, Option<ParsedMessage>)> {
     let entry: RawEntry = serde_json::from_str(line).ok()?;
 
     let entry_type = entry.entry_type.as_deref()?;
@@ -148,7 +131,7 @@ pub fn parse_jsonl_line(line: &str, project: &str) -> Option<(Option<ParsedSessi
             let cache_read = usage.cache_read_input_tokens.unwrap_or(0);
             let cache_creation = usage.cache_creation_input_tokens.unwrap_or(0);
 
-            let cost = compute_cost(&model, input, output, cache_read, cache_creation);
+            let cost = pricing.compute_cost(&model, input, output, cache_read, cache_creation);
 
             let msg = ParsedMessage {
                 uuid,
@@ -179,4 +162,64 @@ pub fn decode_project_name(dir_name: &str) -> String {
         .find(|s| !s.is_empty())
         .unwrap_or(dir_name)
         .to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_decode_project_name() {
+        assert_eq!(decode_project_name("-Users-saurabh-Dev-echopad"), "echopad");
+        assert_eq!(decode_project_name("-Users-test-myproject"), "myproject");
+        assert_eq!(decode_project_name("simple"), "simple");
+    }
+
+    #[test]
+    fn test_parse_user_message() {
+        let pricing = PricingRegistry::builtin();
+        let line = r#"{"uuid":"u1","sessionId":"s1","type":"user","timestamp":"2025-01-15T10:00:00Z","parentUuid":null,"message":{"role":"user"}}"#;
+        let result = parse_jsonl_line(line, "testproject", &pricing);
+        assert!(result.is_some());
+        let (session, msg) = result.unwrap();
+        assert!(session.is_some());
+        assert!(msg.is_some());
+        let session = session.unwrap();
+        assert_eq!(session.id, "s1");
+        assert_eq!(session.project, "testproject");
+    }
+
+    #[test]
+    fn test_parse_assistant_message() {
+        let pricing = PricingRegistry::builtin();
+        let line = r#"{"uuid":"u2","sessionId":"s1","type":"assistant","timestamp":"2025-01-15T10:00:01Z","message":{"model":"claude-sonnet-4-6-20250514","role":"assistant","usage":{"input_tokens":1000,"output_tokens":500,"cache_read_input_tokens":200,"cache_creation_input_tokens":100}}}"#;
+        let result = parse_jsonl_line(line, "testproject", &pricing);
+        assert!(result.is_some());
+        let (session, msg) = result.unwrap();
+        assert!(session.is_none());
+        let msg = msg.unwrap();
+        assert_eq!(msg.msg_type, "assistant");
+        assert_eq!(msg.input_tokens, 1000);
+        assert_eq!(msg.output_tokens, 500);
+        assert_eq!(msg.cache_read, 200);
+        assert!(msg.cost_usd > 0.0);
+    }
+
+    #[test]
+    fn test_parse_invalid_json() {
+        let pricing = PricingRegistry::builtin();
+        let result = parse_jsonl_line("not json", "test", &pricing);
+        assert!(result.is_none());
+    }
+
+    #[test]
+    fn test_parse_subsequent_user_message() {
+        let pricing = PricingRegistry::builtin();
+        let line = r#"{"uuid":"u3","sessionId":"s1","type":"user","timestamp":"2025-01-15T10:01:00Z","parentUuid":"u2","message":{"role":"user"}}"#;
+        let result = parse_jsonl_line(line, "testproject", &pricing);
+        assert!(result.is_some());
+        let (session, msg) = result.unwrap();
+        assert!(session.is_none()); // Not the first message, so no session
+        assert!(msg.is_some());
+    }
 }

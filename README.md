@@ -1,6 +1,11 @@
 # aitop
 
+[![Crates.io](https://img.shields.io/crates/v/aitop.svg)](https://crates.io/crates/aitop)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 **btop for AI** — a terminal dashboard for monitoring AI token usage, costs, and sessions.
+
+<!-- TODO: Add screenshot/demo GIF here -->
 
 Like `btop` monitors your system resources, `aitop` monitors your AI spend. Built for developers who live in the terminal and want to keep an eye on their Claude Code (and eventually other AI) costs without leaving it.
 
@@ -112,7 +117,20 @@ Config file at `~/.config/aitop/config.toml`:
 refresh = 2          # Refresh interval in seconds
 theme = "ember"      # Color theme
 # weekly_budget = 200.0  # Optional budget gauge
+
+# Custom model pricing (per million tokens)
+# [model_pricing."some-future-model"]
+# input = 5.0
+# output = 25.0
+# cache_read = 0.50
+# cache_creation = 6.25
 ```
+
+Model pricing is extensible — built-in pricing covers Claude models (Opus, Sonnet, Haiku), and you can add or override pricing for any model via config.
+
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for development setup, testing, and PR guidelines.
 
 ## Tech Stack
 

@@ -2,6 +2,9 @@ use anyhow::Result;
 use rusqlite::{params, Connection};
 use std::path::Path;
 
+use super::pricing::PricingRegistry;
+use crate::ui::format::shorten_model;
+
 /// Top-level stats for the dashboard.
 #[derive(Debug, Clone, Default)]
 pub struct DashboardStats {
@@ -125,15 +128,20 @@ pub struct ContributionDay {
 
 pub struct Aggregator {
     conn: Connection,
+    pricing: PricingRegistry,
 }
 
 impl Aggregator {
     pub fn open(db_path: &Path) -> Result<Self> {
+        Self::open_with_pricing(db_path, PricingRegistry::builtin())
+    }
+
+    pub fn open_with_pricing(db_path: &Path, pricing: PricingRegistry) -> Result<Self> {
         let conn = Connection::open_with_flags(
             db_path,
             rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX,
         )?;
-        Ok(Aggregator { conn })
+        Ok(Aggregator { conn, pricing })
     }
 
     pub fn dashboard_stats(&self) -> Result<DashboardStats> {
@@ -391,9 +399,8 @@ impl Aggregator {
             let prev_pct = if total_previous > 0.0 { prev_cost / total_previous * 100.0 } else { 0.0 };
             let pct_change = current_pct - prev_pct;
             if pct_change.abs() > 1.0 {
-                let short = model.replace("claude-", "").replace("-20241022", "").replace("-20250514", "");
                 model_changes.push(ModelChange {
-                    model: short,
+                    model: shorten_model(model),
                     pct_change,
                 });
             }
@@ -499,22 +506,23 @@ impl Aggregator {
             0.0
         };
 
-        // Cache savings: cache_read tokens * (normal_input_price - cache_price) per million
-        // We approximate using sonnet pricing as the average: input=$3, cache=$0.30 => savings = $2.70/Mtok
-        // For a more accurate measure, we compute per-model
-        let cache_savings: f64 = self.conn.query_row(
-            "SELECT COALESCE(SUM(
-                CASE
-                    WHEN LOWER(model) LIKE '%opus%' THEN cache_read * (15.0 - 1.50) / 1000000.0
-                    WHEN LOWER(model) LIKE '%haiku%' THEN cache_read * (0.80 - 0.08) / 1000000.0
-                    ELSE cache_read * (3.0 - 0.30) / 1000000.0
-                END
-             ), 0)
+        // Cache savings: compute per-model using the pricing registry
+        let mut cache_stmt = self.conn.prepare(
+            "SELECT COALESCE(model, 'unknown'), COALESCE(SUM(cache_read), 0)
              FROM messages
-             WHERE model IS NOT NULL",
-            [],
-            |row| row.get(0),
+             WHERE model IS NOT NULL
+             GROUP BY model",
         )?;
+        let cache_rows = cache_stmt
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, i64>(1)?))
+            })?;
+        let mut cache_savings = 0.0;
+        for row in cache_rows.flatten() {
+            let (model, cache_read) = row;
+            let price = self.pricing.lookup(&model);
+            cache_savings += cache_read as f64 * (price.input - price.cache_read) / 1_000_000.0;
+        }
 
         Ok(EfficiencyStats {
             tokens_per_dollar,

@@ -1,3 +1,4 @@
+pub mod format;
 pub mod theme;
 pub mod layout;
 pub mod dashboard;

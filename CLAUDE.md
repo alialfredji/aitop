@@ -12,20 +12,25 @@ cargo build --release # release build
 cargo run             # launch TUI
 cargo run -- --light  # non-interactive table output
 cargo run -- --theme dracula
+cargo clippy -- -D warnings  # lint
+cargo test                   # run all tests
 ```
 
 ## Architecture
 
+- **src/lib.rs** — Library root, re-exports all modules
 - **src/main.rs** — Entry point, event loop, key handling, status bar rendering
 - **src/app.rs** — `AppState` struct and `View` enum, all UI state
 - **src/config.rs** — Config file parsing (`~/.config/aitop/config.toml`)
 - **src/data/** — Data layer
-  - `scanner.rs` — Finds JSONL session files in `~/.claude/projects/`
-  - `parser.rs` — Parses JSONL lines into typed structs
+  - `pricing.rs` — `PricingRegistry` for extensible model pricing (config-driven overrides)
+  - `scanner.rs` — Finds JSONL session files via `scan_projects()`
+  - `parser.rs` — Parses JSONL lines into typed structs, uses `PricingRegistry` for cost computation
   - `db.rs` — SQLite database (WAL mode), file index, metadata table
   - `aggregator.rs` — Read-only queries (dashboard stats, model breakdown, sessions, trends, etc.)
   - `watcher.rs` — File system watcher using `notify` crate
 - **src/ui/** — UI rendering modules
+  - `format.rs` — Shared formatting utilities (`format_tokens`, `shorten_model`, `truncate`, etc.)
   - `theme.rs` — 6 color themes (ember, nord, dracula, gruvbox, catppuccin, mono)
   - `layout.rs` — Main layout with tab bar, content area, status bar
   - `dashboard.rs` — Dashboard view with stats, charts, budget gauge, delta banner
@@ -44,4 +49,5 @@ cargo run -- --theme dracula
 - SQLite uses WAL mode for concurrent read (aggregator) / write (db) access
 - Two separate `Database` instances: one for writes, one read-only for `Aggregator`
 - File watcher uses `notify` crate with tokio→std mpsc bridge for cross-thread events
-- Cost calculations use hardcoded Anthropic pricing in `parser.rs`
+- Cost calculations use `PricingRegistry` (extensible via config overrides in `config.toml`)
+- Version string uses `env!("CARGO_PKG_VERSION")` — update version in `Cargo.toml` only

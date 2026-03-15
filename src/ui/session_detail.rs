@@ -4,6 +4,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Clear, Paragraph};
 use ratatui::Frame;
 
+use super::format::{format_tokens, shorten_model};
 use super::theme::Theme;
 use crate::app::AppState;
 
@@ -255,23 +256,6 @@ fn centered_rect(percent_x: u16, percent_y: u16, area: Rect) -> Rect {
     Layout::horizontal([Constraint::Percentage(percent_x)])
         .flex(Flex::Center)
         .split(vertical[0])[0]
-}
-
-fn shorten_model(model: &str) -> String {
-    model
-        .replace("claude-", "")
-        .replace("-20241022", "")
-        .replace("-20250514", "")
-}
-
-fn format_tokens(n: i64) -> String {
-    if n >= 1_000_000 {
-        format!("{:.1}M", n as f64 / 1_000_000.0)
-    } else if n >= 1_000 {
-        format!("{:.1}K", n as f64 / 1_000.0)
-    } else {
-        n.to_string()
-    }
 }
 
 fn compute_duration(started: &str, updated: &str) -> String {

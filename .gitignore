@@ -2,3 +2,4 @@
 npm/aitop-*/bin/
 *.tar.gz
 dist/
+.claude/

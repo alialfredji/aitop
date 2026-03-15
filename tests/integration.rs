@@ -1,0 +1,151 @@
+use std::fs;
+
+use aitop::data::aggregator::Aggregator;
+use aitop::data::db::Database;
+use aitop::data::scanner::scan_projects;
+
+#[test]
+fn test_scan_ingest_aggregate() {
+    let dir = tempfile::tempdir().unwrap();
+    let projects_dir = dir.path().join("projects");
+    let project_dir = projects_dir.join("-Users-test-myproject");
+    fs::create_dir_all(&project_dir).unwrap();
+
+    // Write sample JSONL with a user message (session start) and an assistant response
+    let jsonl = concat!(
+        r#"{"uuid":"uuid1","sessionId":"sess1","type":"user","timestamp":"2025-01-15T10:00:00Z","parentUuid":null,"message":{"role":"user"}}"#,
+        "\n",
+        r#"{"uuid":"uuid2","sessionId":"sess1","type":"assistant","timestamp":"2025-01-15T10:00:01Z","message":{"model":"claude-sonnet-4-6-20250514","role":"assistant","usage":{"input_tokens":1000,"output_tokens":500,"cache_read_input_tokens":200,"cache_creation_input_tokens":100}}}"#,
+    );
+    fs::write(project_dir.join("sess1.jsonl"), jsonl).unwrap();
+
+    // Scan
+    let files = scan_projects(&projects_dir).unwrap();
+    assert_eq!(files.len(), 1);
+    assert_eq!(files[0].project, "myproject");
+    assert_eq!(files[0].session_id, "sess1");
+
+    // Ingest into SQLite
+    let db_path = dir.path().join("test.db");
+    let db = Database::open(&db_path).unwrap();
+    for f in &files {
+        db.ingest_file(f).unwrap();
+    }
+    drop(db);
+
+    // Aggregate and verify
+    let agg = Aggregator::open(&db_path).unwrap();
+    let stats = agg.dashboard_stats().unwrap();
+    assert_eq!(stats.total_sessions, 1);
+    assert_eq!(stats.total_messages, 2); // 1 user + 1 assistant
+    assert!(stats.spend_all_time > 0.0, "Expected non-zero spend");
+
+    let models = agg.model_breakdown().unwrap();
+    assert_eq!(models.len(), 1);
+    assert!(models[0].model.contains("sonnet"));
+    assert_eq!(models[0].input_tokens, 1000);
+    assert_eq!(models[0].output_tokens, 500);
+    assert_eq!(models[0].cache_read, 200);
+    assert_eq!(models[0].call_count, 1);
+
+    let sessions = agg.sessions_list(10).unwrap();
+    assert_eq!(sessions.len(), 1);
+    assert_eq!(sessions[0].project, "myproject");
+    assert_eq!(sessions[0].total_tokens, 1500); // 1000 + 500
+
+    let cache_ratio = agg.cache_hit_ratio().unwrap();
+    assert!(cache_ratio > 0.0, "Expected non-zero cache ratio");
+}
+
+#[test]
+fn test_multiple_sessions_across_projects() {
+    let dir = tempfile::tempdir().unwrap();
+    let projects_dir = dir.path().join("projects");
+
+    // Two different projects
+    let proj_a = projects_dir.join("-Users-test-projectA");
+    let proj_b = projects_dir.join("-Users-test-projectB");
+    fs::create_dir_all(&proj_a).unwrap();
+    fs::create_dir_all(&proj_b).unwrap();
+
+    let jsonl_a = concat!(
+        r#"{"uuid":"a1","sessionId":"sA","type":"user","timestamp":"2025-01-15T10:00:00Z","parentUuid":null,"message":{"role":"user"}}"#,
+        "\n",
+        r#"{"uuid":"a2","sessionId":"sA","type":"assistant","timestamp":"2025-01-15T10:00:01Z","message":{"model":"claude-opus-4-20250514","role":"assistant","usage":{"input_tokens":500,"output_tokens":200,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}"#,
+    );
+    let jsonl_b = concat!(
+        r#"{"uuid":"b1","sessionId":"sB","type":"user","timestamp":"2025-01-15T11:00:00Z","parentUuid":null,"message":{"role":"user"}}"#,
+        "\n",
+        r#"{"uuid":"b2","sessionId":"sB","type":"assistant","timestamp":"2025-01-15T11:00:01Z","message":{"model":"claude-3-5-haiku-20241022","role":"assistant","usage":{"input_tokens":2000,"output_tokens":1000,"cache_read_input_tokens":500,"cache_creation_input_tokens":0}}}"#,
+    );
+    fs::write(proj_a.join("sA.jsonl"), jsonl_a).unwrap();
+    fs::write(proj_b.join("sB.jsonl"), jsonl_b).unwrap();
+
+    let files = scan_projects(&projects_dir).unwrap();
+    assert_eq!(files.len(), 2);
+
+    let db_path = dir.path().join("test2.db");
+    let db = Database::open(&db_path).unwrap();
+    for f in &files {
+        db.ingest_file(f).unwrap();
+    }
+    drop(db);
+
+    let agg = Aggregator::open(&db_path).unwrap();
+    let stats = agg.dashboard_stats().unwrap();
+    assert_eq!(stats.total_sessions, 2);
+
+    let models = agg.model_breakdown().unwrap();
+    assert_eq!(models.len(), 2);
+
+    let project_costs = agg.project_costs().unwrap();
+    assert_eq!(project_costs.len(), 2);
+}
+
+#[test]
+fn test_incremental_ingest() {
+    let dir = tempfile::tempdir().unwrap();
+    let projects_dir = dir.path().join("projects");
+    let project_dir = projects_dir.join("-Users-test-inc");
+    fs::create_dir_all(&project_dir).unwrap();
+
+    let jsonl_path = project_dir.join("sess1.jsonl");
+
+    // First write: just the user message
+    let line1 = r#"{"uuid":"u1","sessionId":"s1","type":"user","timestamp":"2025-01-15T10:00:00Z","parentUuid":null,"message":{"role":"user"}}"#;
+    fs::write(&jsonl_path, format!("{}\n", line1)).unwrap();
+
+    let db_path = dir.path().join("test_inc.db");
+    let db = Database::open(&db_path).unwrap();
+
+    let files = scan_projects(&projects_dir).unwrap();
+    db.ingest_file(&files[0]).unwrap();
+
+    // Verify 1 session, 1 message
+    {
+        let agg = Aggregator::open(&db_path).unwrap();
+        let stats = agg.dashboard_stats().unwrap();
+        assert_eq!(stats.total_sessions, 1);
+        assert_eq!(stats.total_messages, 1);
+    }
+
+    // Append an assistant response
+    let line2 = r#"{"uuid":"u2","sessionId":"s1","type":"assistant","timestamp":"2025-01-15T10:00:01Z","message":{"model":"claude-sonnet-4-6-20250514","role":"assistant","usage":{"input_tokens":800,"output_tokens":300,"cache_read_input_tokens":0,"cache_creation_input_tokens":0}}}"#;
+    let mut file = fs::OpenOptions::new()
+        .append(true)
+        .open(&jsonl_path)
+        .unwrap();
+    use std::io::Write;
+    writeln!(file, "{}", line2).unwrap();
+
+    // Re-ingest (should only process the new line)
+    let files = scan_projects(&projects_dir).unwrap();
+    db.ingest_file(&files[0]).unwrap();
+    drop(db);
+
+    let agg = Aggregator::open(&db_path).unwrap();
+    let stats = agg.dashboard_stats().unwrap();
+    assert_eq!(stats.total_sessions, 1);
+    assert_eq!(stats.total_messages, 2); // Now 2 messages
+    assert!(stats.spend_all_time > 0.0);
+}

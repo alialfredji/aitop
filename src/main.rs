@@ -1,10 +1,3 @@
-#![allow(dead_code)]
-
-mod app;
-mod config;
-mod data;
-mod ui;
-
 use std::io::{self, Write as _};
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
@@ -23,13 +16,16 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Tabs};
 use ratatui::Terminal;
 
-use app::{AppState, SessionSort, TrendRange, View};
-use config::Config;
-use data::aggregator::Aggregator;
-use data::db::Database;
-use data::scanner::scan_claude_projects;
-use data::watcher::{watch_directory, FsEvent};
-use ui::theme::THEME_NAMES;
+use aitop::app::{AppState, SessionSort, TrendRange, View};
+use aitop::config::Config;
+use aitop::data::aggregator::Aggregator;
+use aitop::data::db::Database;
+use aitop::data::pricing::PricingRegistry;
+use aitop::data::scanner::scan_projects;
+use aitop::data::watcher::{watch_directory, FsEvent};
+use aitop::ui;
+use aitop::ui::format::{format_tokens, shorten_model};
+use aitop::ui::theme::THEME_NAMES;
 
 #[derive(Parser, Debug)]
 #[command(name = "aitop", about = "btop for AI — terminal dashboard for token usage and costs")]
@@ -62,11 +58,18 @@ fn main() -> Result<()> {
         config.refresh = refresh;
     }
 
+    // Build pricing registry from config (with optional user overrides)
+    let pricing = if config.model_pricing.is_empty() {
+        PricingRegistry::builtin()
+    } else {
+        PricingRegistry::with_overrides(&config.model_pricing)
+    };
+
     // Ingest data with startup progress
     let db_path = Config::db_path();
-    let db = Database::open(&db_path)?;
-    let projects_dir = config.claude_projects_dir();
-    let files = scan_claude_projects(&projects_dir)?;
+    let db = Database::open_with_pricing(&db_path, pricing.clone())?;
+    let projects_dir = config.projects_dir();
+    let files = scan_projects(&projects_dir)?;
 
     let total_files = files.len();
     if total_files > 0 {
@@ -88,14 +91,14 @@ fn main() -> Result<()> {
 
     if args.light {
         drop(db);
-        return print_light_mode(&db_path);
+        return print_light_mode(&db_path, pricing);
     }
 
-    run_tui(config, db, &db_path, &projects_dir)
+    run_tui(config, db, &db_path, &projects_dir, pricing)
 }
 
-fn print_light_mode(db_path: &std::path::Path) -> Result<()> {
-    let agg = Aggregator::open(db_path)?;
+fn print_light_mode(db_path: &std::path::Path, pricing: PricingRegistry) -> Result<()> {
+    let agg = Aggregator::open_with_pricing(db_path, pricing)?;
     let stats = agg.dashboard_stats()?;
     let models = agg.model_breakdown()?;
 
@@ -119,7 +122,7 @@ fn print_light_mode(db_path: &std::path::Path) -> Result<()> {
     for m in &models {
         println!(
             "  {:<20} {:>10} {:>10} {:>10} {:>8}",
-            m.model.replace("claude-", ""),
+            shorten_model(&m.model),
             format_tokens(m.input_tokens),
             format_tokens(m.output_tokens),
             m.call_count,
@@ -143,6 +146,7 @@ fn run_tui(
     write_db: Database,
     db_path: &std::path::Path,
     projects_dir: &std::path::Path,
+    pricing: PricingRegistry,
 ) -> Result<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -153,7 +157,7 @@ fn run_tui(
     let mut theme = ui::theme::get_theme(&config.theme);
     let mut state = AppState::new(config);
 
-    let agg = Aggregator::open(db_path)?;
+    let agg = Aggregator::open_with_pricing(db_path, pricing)?;
     state.refresh_data(&agg);
 
     // Delta banner: load last_checked_at and compute deltas
@@ -525,8 +529,10 @@ fn render_status_bar(
     secs_until_refresh: u64,
 ) {
     let left_text = format!(
-        "aitop v0.1.0 \u{2502} {} sessions \u{2502} ${:.2} all-time",
-        state.dashboard.total_sessions, state.dashboard.spend_all_time
+        "aitop v{} \u{2502} {} sessions \u{2502} ${:.2} all-time",
+        env!("CARGO_PKG_VERSION"),
+        state.dashboard.total_sessions,
+        state.dashboard.spend_all_time
     );
 
     let hints = match state.view {
@@ -584,14 +590,4 @@ fn tab_label<'a>(
         Span::styled(shortcut, shortcut_style),
         Span::styled(rest, rest_style),
     ])
-}
-
-fn format_tokens(n: i64) -> String {
-    if n >= 1_000_000 {
-        format!("{:.1}M", n as f64 / 1_000_000.0)
-    } else if n >= 1_000 {
-        format!("{:.1}K", n as f64 / 1_000.0)
-    } else {
-        n.to_string()
-    }
 }

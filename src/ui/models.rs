@@ -3,6 +3,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Paragraph};
 use ratatui::Frame;
 
+use super::format::{format_tokens, shorten_model};
 use super::theme::Theme;
 use super::widgets::cost_color::cost_color;
 use crate::app::AppState;
@@ -122,19 +123,3 @@ pub fn render_models(f: &mut Frame, state: &AppState, theme: &Theme) {
     f.render_widget(Paragraph::new(lines), inner);
 }
 
-fn shorten_model(model: &str) -> String {
-    model
-        .replace("claude-", "")
-        .replace("-20241022", "")
-        .replace("-20250514", "")
-}
-
-fn format_tokens(n: i64) -> String {
-    if n >= 1_000_000 {
-        format!("{:.1}M", n as f64 / 1_000_000.0)
-    } else if n >= 1_000 {
-        format!("{:.1}K", n as f64 / 1_000.0)
-    } else {
-        n.to_string()
-    }
-}

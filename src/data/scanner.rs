@@ -10,8 +10,8 @@ pub struct SessionFile {
     pub project: String,
 }
 
-/// Scan the Claude projects directory for all JSONL session files.
-pub fn scan_claude_projects(projects_dir: &Path) -> Result<Vec<SessionFile>> {
+/// Scan the projects directory for all JSONL session files.
+pub fn scan_projects(projects_dir: &Path) -> Result<Vec<SessionFile>> {
     let mut files = Vec::new();
 
     if !projects_dir.exists() {

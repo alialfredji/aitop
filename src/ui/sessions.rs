@@ -4,6 +4,7 @@ use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, Borders, Row, Table};
 use ratatui::Frame;
 
+use super::format::{format_relative_time, format_tokens, shorten_model, truncate};
 use super::theme::Theme;
 use crate::app::{AppState, SessionSort};
 
@@ -138,46 +139,3 @@ fn render_sparkline(values: &[f64]) -> String {
         .collect()
 }
 
-fn shorten_model(model: &str) -> String {
-    model
-        .replace("claude-", "")
-        .replace("-20241022", "")
-        .replace("-20250514", "")
-}
-
-fn truncate(s: &str, max: usize) -> String {
-    if s.len() > max {
-        format!("{}\u{2026}", &s[..max - 1])
-    } else {
-        s.to_string()
-    }
-}
-
-fn format_tokens(n: i64) -> String {
-    if n >= 1_000_000 {
-        format!("{:.1}M", n as f64 / 1_000_000.0)
-    } else if n >= 1_000 {
-        format!("{:.1}K", n as f64 / 1_000.0)
-    } else {
-        n.to_string()
-    }
-}
-
-fn format_relative_time(iso: &str) -> String {
-    use chrono::{DateTime, Utc};
-    let Ok(dt) = iso.parse::<DateTime<Utc>>() else {
-        return iso.to_string();
-    };
-    let now = Utc::now();
-    let diff = now - dt;
-
-    if diff.num_minutes() < 1 {
-        "just now".to_string()
-    } else if diff.num_minutes() < 60 {
-        format!("{}m ago", diff.num_minutes())
-    } else if diff.num_hours() < 24 {
-        format!("{}h ago", diff.num_hours())
-    } else {
-        format!("{}d ago", diff.num_days())
-    }
-}

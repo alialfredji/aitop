@@ -1,0 +1,224 @@
+use std::collections::HashMap;
+
+/// Per-million-token pricing for a model.
+#[derive(Debug, Clone)]
+pub struct ModelPrice {
+    pub input: f64,
+    pub output: f64,
+    pub cache_read: f64,
+    pub cache_creation: f64,
+}
+
+#[derive(Clone)]
+struct PricingRule {
+    pattern: String,
+    price: ModelPrice,
+}
+
+/// Registry of model pricing rules. Matches model names by substring,
+/// most-specific-first. Falls back to Sonnet pricing for unknown models.
+#[derive(Clone)]
+pub struct PricingRegistry {
+    rules: Vec<PricingRule>,
+    fallback: ModelPrice,
+}
+
+impl PricingRegistry {
+    /// Create a registry with built-in Anthropic pricing.
+    pub fn builtin() -> Self {
+        let opus = ModelPrice {
+            input: 15.0,
+            output: 75.0,
+            cache_read: 1.50,
+            cache_creation: 18.75,
+        };
+        let haiku = ModelPrice {
+            input: 0.80,
+            output: 4.0,
+            cache_read: 0.08,
+            cache_creation: 1.0,
+        };
+        let sonnet = ModelPrice {
+            input: 3.0,
+            output: 15.0,
+            cache_read: 0.30,
+            cache_creation: 3.75,
+        };
+
+        let rules = vec![
+            PricingRule { pattern: "claude-opus-4".into(), price: opus.clone() },
+            PricingRule { pattern: "opus".into(), price: opus },
+            PricingRule { pattern: "claude-3-5-haiku".into(), price: haiku.clone() },
+            PricingRule { pattern: "haiku".into(), price: haiku },
+            PricingRule { pattern: "claude-sonnet-4".into(), price: sonnet.clone() },
+            PricingRule { pattern: "claude-3-7-sonnet".into(), price: sonnet.clone() },
+            PricingRule { pattern: "sonnet".into(), price: sonnet.clone() },
+        ];
+
+        PricingRegistry { rules, fallback: sonnet }
+    }
+
+    /// Create a registry with built-in pricing plus user overrides.
+    /// User overrides are checked first (highest priority).
+    pub fn with_overrides(overrides: &HashMap<String, ModelPriceConfig>) -> Self {
+        let mut registry = Self::builtin();
+        let mut user_rules: Vec<PricingRule> = overrides
+            .iter()
+            .map(|(pattern, cfg)| PricingRule {
+                pattern: pattern.clone(),
+                price: ModelPrice {
+                    input: cfg.input,
+                    output: cfg.output,
+                    cache_read: cfg.cache_read,
+                    cache_creation: cfg.cache_creation,
+                },
+            })
+            .collect();
+        user_rules.append(&mut registry.rules);
+        registry.rules = user_rules;
+        registry
+    }
+
+    /// Look up pricing for a model string. Matches the first rule whose
+    /// pattern is a case-insensitive substring of the model name.
+    pub fn lookup(&self, model: &str) -> &ModelPrice {
+        let model_lower = model.to_lowercase();
+        for rule in &self.rules {
+            if model_lower.contains(&rule.pattern) {
+                return &rule.price;
+            }
+        }
+        &self.fallback
+    }
+
+    /// Compute total cost for a message given token counts.
+    pub fn compute_cost(
+        &self,
+        model: &str,
+        input: i64,
+        output: i64,
+        cache_read: i64,
+        cache_creation: i64,
+    ) -> f64 {
+        let price = self.lookup(model);
+        let scale = 1_000_000.0;
+        (input as f64 * price.input / scale)
+            + (output as f64 * price.output / scale)
+            + (cache_read as f64 * price.cache_read / scale)
+            + (cache_creation as f64 * price.cache_creation / scale)
+    }
+}
+
+/// Config-file representation of model pricing overrides.
+#[derive(Debug, Clone, serde::Deserialize, serde::Serialize)]
+pub struct ModelPriceConfig {
+    pub input: f64,
+    pub output: f64,
+    pub cache_read: f64,
+    pub cache_creation: f64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_builtin_opus() {
+        let reg = PricingRegistry::builtin();
+        let price = reg.lookup("claude-opus-4-20250514");
+        assert_eq!(price.input, 15.0);
+        assert_eq!(price.output, 75.0);
+        assert_eq!(price.cache_read, 1.50);
+        assert_eq!(price.cache_creation, 18.75);
+    }
+
+    #[test]
+    fn test_builtin_opus_short() {
+        let reg = PricingRegistry::builtin();
+        let price = reg.lookup("opus");
+        assert_eq!(price.input, 15.0);
+    }
+
+    #[test]
+    fn test_builtin_haiku() {
+        let reg = PricingRegistry::builtin();
+        let price = reg.lookup("claude-3-5-haiku-20241022");
+        assert_eq!(price.input, 0.80);
+        assert_eq!(price.output, 4.0);
+    }
+
+    #[test]
+    fn test_builtin_sonnet() {
+        let reg = PricingRegistry::builtin();
+        let price = reg.lookup("claude-sonnet-4-6-20250514");
+        assert_eq!(price.input, 3.0);
+        assert_eq!(price.output, 15.0);
+    }
+
+    #[test]
+    fn test_builtin_37_sonnet() {
+        let reg = PricingRegistry::builtin();
+        let price = reg.lookup("claude-3-7-sonnet-20250219");
+        assert_eq!(price.input, 3.0);
+    }
+
+    #[test]
+    fn test_unknown_model_falls_back_to_sonnet() {
+        let reg = PricingRegistry::builtin();
+        let price = reg.lookup("some-totally-unknown-model");
+        assert_eq!(price.input, 3.0);
+        assert_eq!(price.output, 15.0);
+    }
+
+    #[test]
+    fn test_compute_cost_sonnet_input_only() {
+        let reg = PricingRegistry::builtin();
+        // 1M input tokens at $3/Mtok = $3.00
+        let cost = reg.compute_cost("claude-sonnet-4-6-20250514", 1_000_000, 0, 0, 0);
+        assert!((cost - 3.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_compute_cost_opus_output_only() {
+        let reg = PricingRegistry::builtin();
+        // 1M output tokens at $75/Mtok = $75.00
+        let cost = reg.compute_cost("claude-opus-4-20250514", 0, 1_000_000, 0, 0);
+        assert!((cost - 75.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_user_override() {
+        let mut overrides = HashMap::new();
+        overrides.insert(
+            "my-custom-model".into(),
+            ModelPriceConfig {
+                input: 5.0,
+                output: 25.0,
+                cache_read: 0.50,
+                cache_creation: 6.25,
+            },
+        );
+        let reg = PricingRegistry::with_overrides(&overrides);
+        let price = reg.lookup("my-custom-model-v2");
+        assert_eq!(price.input, 5.0);
+        assert_eq!(price.output, 25.0);
+    }
+
+    #[test]
+    fn test_user_override_does_not_break_builtins() {
+        let mut overrides = HashMap::new();
+        overrides.insert(
+            "my-model".into(),
+            ModelPriceConfig {
+                input: 99.0,
+                output: 99.0,
+                cache_read: 99.0,
+                cache_creation: 99.0,
+            },
+        );
+        let reg = PricingRegistry::with_overrides(&overrides);
+        // Built-in models should still match correctly
+        let price = reg.lookup("claude-opus-4-20250514");
+        assert_eq!(price.input, 15.0);
+    }
+}
