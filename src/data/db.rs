@@ -1,0 +1,192 @@
+use anyhow::Result;
+use rusqlite::{params, Connection};
+use std::path::Path;
+
+use super::parser::{ParsedMessage, ParsedSession};
+use super::scanner::SessionFile;
+
+pub struct Database {
+    conn: Connection,
+}
+
+impl Database {
+    pub fn open(path: &Path) -> Result<Self> {
+        let conn = Connection::open(path)?;
+        conn.execute_batch("PRAGMA journal_mode=WAL; PRAGMA synchronous=NORMAL;")?;
+        let db = Database { conn };
+        db.create_tables()?;
+        Ok(db)
+    }
+
+    fn create_tables(&self) -> Result<()> {
+        self.conn.execute_batch(
+            "
+            CREATE TABLE IF NOT EXISTS sessions (
+                id          TEXT PRIMARY KEY,
+                project     TEXT NOT NULL,
+                started_at  TEXT NOT NULL,
+                updated_at  TEXT NOT NULL,
+                model       TEXT,
+                version     TEXT
+            );
+
+            CREATE TABLE IF NOT EXISTS messages (
+                id              TEXT PRIMARY KEY,
+                session_id      TEXT NOT NULL,
+                type            TEXT NOT NULL,
+                timestamp       TEXT NOT NULL,
+                model           TEXT,
+                input_tokens    INTEGER DEFAULT 0,
+                output_tokens   INTEGER DEFAULT 0,
+                cache_read      INTEGER DEFAULT 0,
+                cache_creation  INTEGER DEFAULT 0,
+                cost_usd        REAL DEFAULT 0.0
+            );
+
+            CREATE INDEX IF NOT EXISTS idx_messages_session ON messages(session_id);
+            CREATE INDEX IF NOT EXISTS idx_messages_timestamp ON messages(timestamp);
+            CREATE INDEX IF NOT EXISTS idx_messages_model ON messages(model);
+
+            CREATE TABLE IF NOT EXISTS file_index (
+                path        TEXT PRIMARY KEY,
+                last_offset INTEGER DEFAULT 0,
+                last_mtime  TEXT
+            );
+            ",
+        )?;
+        Ok(())
+    }
+
+    /// Get the last parsed offset for a file, or 0 if never parsed.
+    pub fn get_file_offset(&self, path: &str) -> Result<u64> {
+        let result = self.conn.query_row(
+            "SELECT last_offset FROM file_index WHERE path = ?1",
+            params![path],
+            |row| row.get::<_, i64>(0),
+        );
+        match result {
+            Ok(offset) => Ok(offset as u64),
+            Err(rusqlite::Error::QueryReturnedNoRows) => Ok(0),
+            Err(e) => Err(e.into()),
+        }
+    }
+
+    /// Update the file index after parsing.
+    pub fn set_file_offset(&self, path: &str, offset: u64, mtime: &str) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO file_index (path, last_offset, last_mtime) VALUES (?1, ?2, ?3)
+             ON CONFLICT(path) DO UPDATE SET last_offset = ?2, last_mtime = ?3",
+            params![path, offset as i64, mtime],
+        )?;
+        Ok(())
+    }
+
+    pub fn upsert_session(&self, session: &ParsedSession) -> Result<()> {
+        self.conn.execute(
+            "INSERT INTO sessions (id, project, started_at, updated_at, model, version)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+             ON CONFLICT(id) DO UPDATE SET
+                updated_at = MAX(sessions.updated_at, ?4),
+                model = COALESCE(?5, sessions.model),
+                version = COALESCE(?6, sessions.version)",
+            params![
+                session.id,
+                session.project,
+                session.started_at,
+                session.updated_at,
+                session.model,
+                session.version,
+            ],
+        )?;
+        Ok(())
+    }
+
+    pub fn insert_message(&self, msg: &ParsedMessage) -> Result<()> {
+        self.conn.execute(
+            "INSERT OR IGNORE INTO messages (id, session_id, type, timestamp, model, input_tokens, output_tokens, cache_read, cache_creation, cost_usd)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+            params![
+                msg.uuid,
+                msg.session_id,
+                msg.msg_type,
+                msg.timestamp,
+                msg.model,
+                msg.input_tokens,
+                msg.output_tokens,
+                msg.cache_read,
+                msg.cache_creation,
+                msg.cost_usd,
+            ],
+        )?;
+        Ok(())
+    }
+
+    /// Ingest a JSONL file, starting from the given byte offset.
+    pub fn ingest_file(&self, file: &SessionFile) -> Result<u64> {
+        let path_str = file.path.to_string_lossy().to_string();
+        let offset = self.get_file_offset(&path_str)?;
+
+        let content = std::fs::read(&file.path)?;
+        if (offset as usize) >= content.len() {
+            return Ok(offset);
+        }
+
+        let new_content = &content[offset as usize..];
+        let text = String::from_utf8_lossy(new_content);
+
+        let tx = self.conn.unchecked_transaction()?;
+
+        for line in text.lines() {
+            if line.trim().is_empty() {
+                continue;
+            }
+            if let Some((session, message)) =
+                super::parser::parse_jsonl_line(line, &file.project)
+            {
+                if let Some(s) = session {
+                    // Use unchecked since we're in a transaction
+                    tx.execute(
+                        "INSERT INTO sessions (id, project, started_at, updated_at, model, version)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                         ON CONFLICT(id) DO UPDATE SET
+                            updated_at = MAX(sessions.updated_at, ?4),
+                            model = COALESCE(?5, sessions.model),
+                            version = COALESCE(?6, sessions.version)",
+                        params![s.id, s.project, s.started_at, s.updated_at, s.model, s.version],
+                    )?;
+                }
+                if let Some(m) = message {
+                    // Update session's model and updated_at
+                    if let Some(ref model) = m.model {
+                        tx.execute(
+                            "UPDATE sessions SET model = ?1, updated_at = MAX(updated_at, ?2) WHERE id = ?3",
+                            params![model, m.timestamp, m.session_id],
+                        )?;
+                    }
+                    tx.execute(
+                        "INSERT OR IGNORE INTO messages (id, session_id, type, timestamp, model, input_tokens, output_tokens, cache_read, cache_creation, cost_usd)
+                         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
+                        params![m.uuid, m.session_id, m.msg_type, m.timestamp, m.model, m.input_tokens, m.output_tokens, m.cache_read, m.cache_creation, m.cost_usd],
+                    )?;
+                }
+            }
+        }
+
+        let new_offset = content.len() as u64;
+        let mtime = std::fs::metadata(&file.path)?
+            .modified()?
+            .duration_since(std::time::UNIX_EPOCH)
+            .unwrap_or_default()
+            .as_secs()
+            .to_string();
+
+        tx.execute(
+            "INSERT INTO file_index (path, last_offset, last_mtime) VALUES (?1, ?2, ?3)
+             ON CONFLICT(path) DO UPDATE SET last_offset = ?2, last_mtime = ?3",
+            params![path_str, new_offset as i64, mtime],
+        )?;
+
+        tx.commit()?;
+        Ok(new_offset)
+    }
+}

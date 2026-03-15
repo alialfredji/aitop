@@ -1,0 +1,26 @@
+[package]
+name = "aitop"
+version = "0.1.0"
+edition = "2021"
+description = "btop for AI — terminal dashboard for token usage and costs"
+license = "MIT"
+
+[dependencies]
+ratatui = "0.29"
+crossterm = "0.28"
+tokio = { version = "1", features = ["full"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+rusqlite = { version = "0.32", features = ["bundled"] }
+notify = "7"
+toml = "0.8"
+dirs = "6"
+chrono = { version = "0.4", features = ["serde"] }
+clap = { version = "4", features = ["derive"] }
+urlencoding = "2"
+anyhow = "1"
+
+[profile.release]
+opt-level = 3
+lto = true
+strip = true
