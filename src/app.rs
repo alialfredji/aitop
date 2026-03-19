@@ -44,6 +44,12 @@ pub enum TrendRange {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ChartType {
+    Line,
+    Bar,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum SessionSort {
     Cost,
     Tokens,
@@ -93,6 +99,7 @@ pub struct AppState {
     pub session_sort: SessionSort,
     pub sort_ascending: bool,
     pub trend_range: TrendRange,
+    pub chart_type: ChartType,
     pub theme_index: usize,
 
     // Live mode
@@ -155,6 +162,7 @@ impl AppState {
             session_sort: SessionSort::Recent,
             sort_ascending: false,
             trend_range: TrendRange::Month,
+            chart_type: ChartType::Bar,
             theme_index,
 
             last_live_event: None,

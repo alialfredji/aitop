@@ -543,6 +543,12 @@ fn handle_trends_key(state: &mut AppState, key: event::KeyEvent) {
             };
             state.needs_refresh = true;
         }
+        KeyCode::Char('b') => {
+            state.chart_type = match state.chart_type {
+                aitop::app::ChartType::Line => aitop::app::ChartType::Bar,
+                aitop::app::ChartType::Bar => aitop::app::ChartType::Line,
+            };
+        }
         _ => {}
     }
 }

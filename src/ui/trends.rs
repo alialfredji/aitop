@@ -6,7 +6,7 @@ use ratatui::widgets::{Axis, Block, Borders, Chart, Dataset, GraphType, Paragrap
 use ratatui::Frame;
 
 use super::theme::Theme;
-use crate::app::{AppState, TrendRange};
+use crate::app::{AppState, ChartType, TrendRange};
 
 pub fn render_trends(f: &mut Frame, state: &AppState, theme: &Theme) {
     let area = state.content_area;
@@ -34,13 +34,18 @@ fn render_chart(f: &mut Frame, state: &AppState, theme: &Theme, area: ratatui::l
         TrendRange::All => "all time",
     };
 
+    let chart_label = match state.chart_type {
+        ChartType::Line => "line",
+        ChartType::Bar => "bar",
+    };
+
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.muted))
         .title(Line::from(vec![
             Span::styled("T", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
             Span::styled("rends ", Style::default().fg(theme.text)),
-            Span::styled(format!("({}) ", range_label), Style::default().fg(theme.text_dim)),
+            Span::styled(format!("({}, {}) ", range_label, chart_label), Style::default().fg(theme.text_dim)),
             Span::styled("  ", Style::default()),
             Span::styled("w", Style::default().fg(theme.tertiary).add_modifier(Modifier::UNDERLINED)),
             Span::styled("eek ", Style::default().fg(theme.text_dim)),
@@ -49,8 +54,8 @@ fn render_chart(f: &mut Frame, state: &AppState, theme: &Theme, area: ratatui::l
             Span::styled("nth ", Style::default().fg(theme.text_dim)),
             Span::styled("a", Style::default().fg(theme.tertiary).add_modifier(Modifier::UNDERLINED)),
             Span::styled("ll ", Style::default().fg(theme.text_dim)),
-            Span::styled("←→", Style::default().fg(theme.tertiary)),
-            Span::styled(" cycle ", Style::default().fg(theme.text_dim)),
+            Span::styled("b", Style::default().fg(theme.tertiary).add_modifier(Modifier::UNDERLINED)),
+            Span::styled("ar/line ", Style::default().fg(theme.text_dim)),
         ]));
 
     if state.daily_spend.is_empty() {
@@ -63,14 +68,6 @@ fn render_chart(f: &mut Frame, state: &AppState, theme: &Theme, area: ratatui::l
         return;
     }
 
-    // Prepare chart data
-    let data_points: Vec<(f64, f64)> = state
-        .daily_spend
-        .iter()
-        .enumerate()
-        .map(|(i, d)| (i as f64, d.cost))
-        .collect();
-
     let max_cost = state
         .daily_spend
         .iter()
@@ -78,47 +75,144 @@ fn render_chart(f: &mut Frame, state: &AppState, theme: &Theme, area: ratatui::l
         .fold(0.0f64, f64::max);
     let y_max = (max_cost * 1.2).max(1.0);
 
-    let x_labels: Vec<Span> = if state.daily_spend.len() > 1 {
-        vec![
-            Span::styled(
-                state.daily_spend.first().map(|d| d.date.clone()).unwrap_or_default(),
-                Style::default().fg(theme.text_dim),
-            ),
-            Span::styled(
-                state.daily_spend.last().map(|d| d.date.clone()).unwrap_or_default(),
-                Style::default().fg(theme.text_dim),
-            ),
-        ]
-    } else {
-        vec![Span::styled("today", Style::default().fg(theme.text_dim))]
-    };
+    match state.chart_type {
+        ChartType::Line => {
+            let data_points: Vec<(f64, f64)> = state
+                .daily_spend
+                .iter()
+                .enumerate()
+                .map(|(i, d)| (i as f64, d.cost))
+                .collect();
 
-    let dataset = Dataset::default()
-        .marker(symbols::Marker::Braille)
-        .graph_type(GraphType::Line)
-        .style(Style::default().fg(theme.accent))
-        .data(&data_points);
-
-    let chart = Chart::new(vec![dataset])
-        .block(block)
-        .x_axis(
-            Axis::default()
-                .bounds([0.0, (data_points.len() as f64 - 1.0).max(1.0)])
-                .labels(x_labels),
-        )
-        .y_axis(
-            Axis::default()
-                .bounds([0.0, y_max])
-                .labels(vec![
-                    Span::styled("$0", Style::default().fg(theme.text_dim)),
+            let x_labels: Vec<Span> = if state.daily_spend.len() > 1 {
+                vec![
                     Span::styled(
-                        format!("${:.0}", y_max),
+                        state.daily_spend.first().map(|d| d.date.clone()).unwrap_or_default(),
                         Style::default().fg(theme.text_dim),
                     ),
-                ]),
-        );
+                    Span::styled(
+                        state.daily_spend.last().map(|d| d.date.clone()).unwrap_or_default(),
+                        Style::default().fg(theme.text_dim),
+                    ),
+                ]
+            } else {
+                vec![Span::styled("today", Style::default().fg(theme.text_dim))]
+            };
 
-    f.render_widget(chart, area);
+            let dataset = Dataset::default()
+                .marker(symbols::Marker::Braille)
+                .graph_type(GraphType::Line)
+                .style(Style::default().fg(theme.accent))
+                .data(&data_points);
+
+            let chart = Chart::new(vec![dataset])
+                .block(block)
+                .x_axis(
+                    Axis::default()
+                        .bounds([0.0, (data_points.len() as f64 - 1.0).max(1.0)])
+                        .labels(x_labels),
+                )
+                .y_axis(
+                    Axis::default()
+                        .bounds([0.0, y_max])
+                        .labels(vec![
+                            Span::styled("$0", Style::default().fg(theme.text_dim)),
+                            Span::styled(
+                                format!("${:.0}", y_max),
+                                Style::default().fg(theme.text_dim),
+                            ),
+                        ]),
+                );
+
+            f.render_widget(chart, area);
+        }
+        ChartType::Bar => {
+            let inner = block.inner(area);
+            f.render_widget(block, area);
+            render_bar_chart(f, state, theme, inner, y_max);
+        }
+    }
+}
+
+fn render_bar_chart(
+    f: &mut Frame,
+    state: &AppState,
+    theme: &Theme,
+    area: ratatui::layout::Rect,
+    y_max: f64,
+) {
+    use super::widgets::cost_color::cost_color;
+
+    if area.height < 2 || area.width < 4 {
+        return;
+    }
+
+    let n = state.daily_spend.len();
+    if n == 0 {
+        return;
+    }
+
+    let chart_height = area.height.saturating_sub(2) as usize; // reserve 1 for labels, 1 for y-axis label
+    let available_width = area.width.saturating_sub(8) as usize; // reserve left margin for y-axis labels
+
+    // Each bar gets a slot; slot = bar_width + 1 gap
+    let slot_width = (available_width / n).max(1);
+    let bar_w = slot_width.saturating_sub(1).max(1);
+
+    // Build bar rows from top to bottom
+    let mut lines = Vec::new();
+
+    // Y-axis top label
+    lines.push(Line::from(vec![
+        Span::styled(
+            format!(" ${:<5.0} ", y_max),
+            Style::default().fg(theme.text_dim),
+        ),
+    ]));
+
+    // Bar rows (top to bottom)
+    for row in 0..chart_height {
+        let threshold = y_max * (1.0 - (row as f64 / chart_height as f64));
+        let mut spans = vec![Span::raw("        ")]; // left margin
+
+        for day in &state.daily_spend {
+            let ch = if day.cost >= threshold {
+                "\u{2588}".repeat(bar_w) // █
+            } else {
+                " ".repeat(bar_w)
+            };
+            let color = if day.cost >= threshold {
+                cost_color(day.cost)
+            } else {
+                theme.bar_empty
+            };
+            spans.push(Span::styled(ch, Style::default().fg(color)));
+            if slot_width > bar_w {
+                spans.push(Span::raw(" "));
+            }
+        }
+        lines.push(Line::from(spans));
+    }
+
+    // X-axis labels
+    let mut label_spans = vec![Span::styled(" $0     ", Style::default().fg(theme.text_dim))];
+    for (i, day) in state.daily_spend.iter().enumerate() {
+        // Show label for first, last, and every ~7th day
+        let label = if i == 0 || i == n - 1 || (n > 14 && i % 7 == 0) {
+            // Show just MM/DD
+            if day.date.len() >= 10 {
+                format!("{:<width$}", &day.date[5..10], width = slot_width)
+            } else {
+                format!("{:<width$}", &day.date, width = slot_width)
+            }
+        } else {
+            " ".repeat(slot_width)
+        };
+        label_spans.push(Span::styled(label, Style::default().fg(theme.text_dim)));
+    }
+    lines.push(Line::from(label_spans));
+
+    f.render_widget(Paragraph::new(lines), area);
 }
 
 fn render_heatmap(f: &mut Frame, state: &AppState, theme: &Theme, area: ratatui::layout::Rect) {
