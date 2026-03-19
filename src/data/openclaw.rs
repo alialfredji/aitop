@@ -261,6 +261,11 @@ pub fn parse_openclaw_file(
                                     (0, 0, 0, 0, 0.0)
                                 };
 
+                            // Skip zero-token/zero-cost messages (e.g. delivery-mirror routing)
+                            if input == 0 && output == 0 && cache_read == 0 && cache_write == 0 && cost <= 0.0 {
+                                continue;
+                            }
+
                             let model = msg.model.clone().or_else(|| current_model.clone());
 
                             messages.push(ParsedMessage {

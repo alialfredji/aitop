@@ -206,10 +206,11 @@ impl Aggregator {
              FROM messages
              WHERE model IS NOT NULL AND model != ''
              GROUP BY model
+             HAVING SUM(cost_usd) > 0 OR SUM(input_tokens) > 0 OR SUM(output_tokens) > 0
              ORDER BY SUM(cost_usd) DESC",
         )?;
 
-        let rows = stmt.query_map([], |row| {
+        let raw_rows: Vec<ModelStats> = stmt.query_map([], |row| {
             Ok(ModelStats {
                 model: row.get(0)?,
                 cost: row.get(1)?,
@@ -220,9 +221,33 @@ impl Aggregator {
                 call_count: row.get(6)?,
                 provider: row.get(7)?,
             })
-        })?;
+        })?.filter_map(|r| r.ok()).collect();
 
-        Ok(rows.filter_map(|r| r.ok()).collect())
+        // Merge rows with the same shortened model name (e.g. claude-haiku-4-5-20251001
+        // and claude-haiku-4-5 both shorten to haiku-4-5)
+        let mut merged: std::collections::HashMap<String, ModelStats> =
+            std::collections::HashMap::new();
+        for row in raw_rows {
+            let key = shorten_model(&row.model);
+            merged
+                .entry(key.clone())
+                .and_modify(|existing| {
+                    existing.cost += row.cost;
+                    existing.input_tokens += row.input_tokens;
+                    existing.output_tokens += row.output_tokens;
+                    existing.cache_read += row.cache_read;
+                    existing.cache_creation += row.cache_creation;
+                    existing.call_count += row.call_count;
+                })
+                .or_insert(ModelStats {
+                    model: key,
+                    ..row
+                });
+        }
+
+        let mut result: Vec<ModelStats> = merged.into_values().collect();
+        result.sort_by(|a, b| b.cost.partial_cmp(&a.cost).unwrap_or(std::cmp::Ordering::Equal));
+        Ok(result)
     }
 
     pub fn sessions_list(&self, limit: usize) -> Result<Vec<SessionSummary>> {
