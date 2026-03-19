@@ -38,7 +38,7 @@ fn render_chart(f: &mut Frame, state: &AppState, theme: &Theme, area: ratatui::l
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.muted))
         .title(Line::from(vec![
-            Span::styled(" T", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
+            Span::styled("T", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
             Span::styled("rends ", Style::default().fg(theme.text)),
             Span::styled(format!("({}) ", range_label), Style::default().fg(theme.text_dim)),
             Span::styled("  ", Style::default()),

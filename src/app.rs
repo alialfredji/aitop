@@ -99,6 +99,9 @@ pub struct AppState {
     pub last_live_event: Option<Instant>,
     pub live_project: Option<String>,
 
+    // Theme flash
+    pub theme_flash: Option<Instant>,
+
     // Control
     pub should_quit: bool,
     pub needs_refresh: bool,
@@ -156,6 +159,8 @@ impl AppState {
 
             last_live_event: None,
             live_project: None,
+
+            theme_flash: None,
 
             should_quit: false,
             needs_refresh: true,

@@ -86,3 +86,83 @@ jobs:
             aitop-*.tar.gz
             checksums-sha256.txt
           generate_release_notes: true
+
+  homebrew:
+    name: Update Homebrew Formula
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Extract version
+        id: version
+        run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout homebrew tap
+        uses: actions/checkout@v4
+        with:
+          repository: bugkill3r/homebrew-aitop
+          token: ${{ secrets.HOMEBREW_TAP_TOKEN }}
+
+      - uses: actions/download-artifact@v4
+        with:
+          merge-multiple: true
+          path: artifacts
+
+      - name: Compute SHA256s
+        id: sha
+        run: |
+          cd artifacts
+          echo "aarch64_darwin=$(sha256sum aitop-*-aarch64-apple-darwin.tar.gz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "x86_64_darwin=$(sha256sum aitop-*-x86_64-apple-darwin.tar.gz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "aarch64_linux=$(sha256sum aitop-*-aarch64-unknown-linux-gnu.tar.gz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+          echo "x86_64_linux=$(sha256sum aitop-*-x86_64-unknown-linux-gnu.tar.gz | cut -d' ' -f1)" >> "$GITHUB_OUTPUT"
+
+      - name: Update formula
+        run: |
+          cat > Formula/aitop.rb << 'FORMULA'
+          class Aitop < Formula
+            desc "btop for AI — terminal dashboard for token usage and costs"
+            homepage "https://github.com/bugkill3r/aitop"
+            version "${{ steps.version.outputs.version }}"
+            license "MIT"
+
+            on_macos do
+              on_arm do
+                url "https://github.com/bugkill3r/aitop/releases/download/v#{version}/aitop-v#{version}-aarch64-apple-darwin.tar.gz"
+                sha256 "${{ steps.sha.outputs.aarch64_darwin }}"
+              end
+              on_intel do
+                url "https://github.com/bugkill3r/aitop/releases/download/v#{version}/aitop-v#{version}-x86_64-apple-darwin.tar.gz"
+                sha256 "${{ steps.sha.outputs.x86_64_darwin }}"
+              end
+            end
+
+            on_linux do
+              on_arm do
+                url "https://github.com/bugkill3r/aitop/releases/download/v#{version}/aitop-v#{version}-aarch64-unknown-linux-gnu.tar.gz"
+                sha256 "${{ steps.sha.outputs.aarch64_linux }}"
+              end
+              on_intel do
+                url "https://github.com/bugkill3r/aitop/releases/download/v#{version}/aitop-v#{version}-x86_64-unknown-linux-gnu.tar.gz"
+                sha256 "${{ steps.sha.outputs.x86_64_linux }}"
+              end
+            end
+
+            def install
+              bin.install "aitop"
+            end
+
+            test do
+              assert_match "aitop", shell_output("#{bin}/aitop --help")
+            end
+          end
+          FORMULA
+          # Remove leading whitespace from heredoc
+          sed -i 's/^          //' Formula/aitop.rb
+
+      - name: Push updated formula
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Formula/aitop.rb
+          git commit -m "Update aitop to ${{ steps.version.outputs.version }}"
+          git push

@@ -348,6 +348,7 @@ fn handle_key(
         KeyCode::Char('p') if state.view != View::Sessions => {
             state.theme_index = (state.theme_index + 1) % THEME_NAMES.len();
             *theme = ui::theme::get_theme(THEME_NAMES[state.theme_index]);
+            state.theme_flash = Some(std::time::Instant::now());
         }
 
         _ => match state.view {
@@ -523,7 +524,7 @@ fn render_tab_bar(
 
 fn render_status_bar(
     f: &mut ratatui::Frame,
-    state: &AppState,
+    state: &mut AppState,
     theme: &ui::theme::Theme,
     area: Rect,
     secs_until_refresh: u64,
@@ -535,11 +536,24 @@ fn render_status_bar(
         state.dashboard.spend_all_time
     );
 
-    let hints = match state.view {
-        View::Dashboard => "d:dashboard  s:sessions  m:models  t:trends  ?:help  p:theme",
-        View::Sessions => "j/k:navigate  c:cost  n:tokens  p:project  u:updated  /:filter  ?:help",
-        View::Models => "d:dashboard  s:sessions  t:trends  p:theme  ?:help",
-        View::Trends => "w:week  o:month  a:all  \u{2190}\u{2192}:cycle  p:theme  ?:help",
+    // Show theme name flash for 2 seconds after cycling
+    let theme_flash_active = state
+        .theme_flash
+        .map(|t| t.elapsed().as_secs() < 2)
+        .unwrap_or(false);
+    if !theme_flash_active && state.theme_flash.is_some() {
+        state.theme_flash = None;
+    }
+
+    let hints = if theme_flash_active {
+        format!("theme: {}  (p to cycle)", theme.name)
+    } else {
+        match state.view {
+            View::Dashboard => "d:dashboard  s:sessions  m:models  t:trends  ?:help  p:theme".to_string(),
+            View::Sessions => "j/k:navigate  c:cost  n:tokens  p:project  u:updated  /:filter  ?:help".to_string(),
+            View::Models => "d:dashboard  s:sessions  t:trends  p:theme  ?:help".to_string(),
+            View::Trends => "w:week  o:month  a:all  \u{2190}\u{2192}:cycle  p:theme  ?:help".to_string(),
+        }
     };
 
     let right_text = format!("{}  \u{27f3} {}s", hints, secs_until_refresh);

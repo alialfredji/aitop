@@ -48,3 +48,7 @@
 - [ ] Session comparison (side-by-side)
 - [ ] Export (JSON, markdown summary)
 - [ ] Distribution: Homebrew, cargo publish, GitHub releases
+- [ ] Machine-readable output (`aitop --json`) for multi-agent workflow observability
+  - Expose budget remaining, burn rate, per-model spend, time until provider reset
+  - Agents/orchestrators query aitop and self-throttle or switch models
+  - aitop stays pure observability — enforcement is external (Unix philosophy)

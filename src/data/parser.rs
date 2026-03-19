@@ -46,6 +46,7 @@ struct RawEntry {
 #[derive(Debug, Deserialize)]
 struct RawMessage {
     model: Option<String>,
+    #[allow(dead_code)]
     role: Option<String>,
     usage: Option<RawUsage>,
 }
@@ -148,6 +149,8 @@ pub fn parse_jsonl_line(
             };
             Some((None, Some(msg)))
         }
+        // "progress" entries duplicate data already in subagent files —
+        // skip them to avoid double-counting.
         _ => None,
     }
 }

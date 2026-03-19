@@ -5,9 +5,23 @@
 
 **btop for AI** — a terminal dashboard for monitoring AI token usage, costs, and sessions.
 
-<!-- TODO: Add screenshot/demo GIF here -->
+![Dashboard](docs/screenshots/dashboard.png)
 
 Like `btop` monitors your system resources, `aitop` monitors your AI spend. Built for developers who live in the terminal and want to keep an eye on their Claude Code (and eventually other AI) costs without leaving it.
+
+<details>
+<summary>More screenshots</summary>
+
+### Sessions
+![Sessions](docs/screenshots/sessions.png)
+
+### Models
+![Models](docs/screenshots/models.png)
+
+### Trends
+![Trends](docs/screenshots/trends.png)
+
+</details>
 
 ## Features
 

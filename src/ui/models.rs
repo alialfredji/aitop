@@ -15,7 +15,7 @@ pub fn render_models(f: &mut Frame, state: &AppState, theme: &Theme) {
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.muted))
         .title(Line::from(vec![
-            Span::styled(" M", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
+            Span::styled("M", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
             Span::styled("odels ", Style::default().fg(theme.text)),
         ]));
 

@@ -27,7 +27,7 @@ pub fn render_sessions(f: &mut Frame, state: &mut AppState, theme: &Theme) {
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.muted))
         .title(Line::from(vec![
-            Span::styled(" S", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
+            Span::styled("S", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
             Span::styled("essions ", Style::default().fg(theme.text)),
             Span::styled(
                 format!("({}) ", state.displayed_sessions().len()),

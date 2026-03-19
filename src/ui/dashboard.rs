@@ -102,7 +102,7 @@ fn render_metrics(f: &mut Frame, state: &AppState, theme: &Theme, area: ratatui:
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.muted))
         .title(Line::from(vec![
-            Span::styled(" B", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
+            Span::styled("B", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
             Span::styled("urn Rate ", Style::default().fg(theme.text)),
         ]));
 
@@ -219,7 +219,7 @@ fn render_token_flow(f: &mut Frame, state: &AppState, theme: &Theme, area: ratat
                 .borders(Borders::ALL)
                 .border_style(Style::default().fg(theme.muted))
                 .title(Line::from(vec![
-                    Span::styled(" T", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
+                    Span::styled("T", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
                     Span::styled("oken Flow ", Style::default().fg(theme.text)),
                     Span::styled("(last hour) ", Style::default().fg(theme.text_dim)),
                 ])),
@@ -247,7 +247,7 @@ fn render_model_breakdown(f: &mut Frame, state: &AppState, theme: &Theme, area: 
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.muted))
         .title(Line::from(vec![
-            Span::styled(" M", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
+            Span::styled("M", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
             Span::styled("odels ", Style::default().fg(theme.text)),
         ]));
 
@@ -302,7 +302,7 @@ fn render_project_costs(f: &mut Frame, state: &AppState, theme: &Theme, area: Re
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.muted))
         .title(Line::from(vec![
-            Span::styled(" P", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
+            Span::styled("P", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
             Span::styled("rojects ", Style::default().fg(theme.text)),
         ]));
 
@@ -342,7 +342,7 @@ fn render_project_costs(f: &mut Frame, state: &AppState, theme: &Theme, area: Re
                 Style::default().fg(theme.tertiary).add_modifier(Modifier::BOLD),
             ),
             Span::styled(
-                format!("({:>3.0}%)", pc.percentage),
+                format!("({:.0}%)", pc.percentage),
                 Style::default().fg(theme.text_dim),
             ),
         ]));
@@ -356,7 +356,7 @@ fn render_active_sessions(f: &mut Frame, state: &AppState, theme: &Theme, area: 
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.muted))
         .title(Line::from(vec![
-            Span::styled(" S", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
+            Span::styled("S", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
             Span::styled("essions ", Style::default().fg(theme.text)),
         ]));
 
@@ -413,7 +413,7 @@ fn render_activity_feed(f: &mut Frame, state: &AppState, theme: &Theme, area: ra
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.muted))
         .title(Line::from(vec![
-            Span::styled(" R", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
+            Span::styled("R", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
             Span::styled("ecent Activity ", Style::default().fg(theme.text)),
         ]));
 
