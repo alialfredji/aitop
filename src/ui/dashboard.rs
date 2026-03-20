@@ -211,8 +211,7 @@ fn render_token_flow(f: &mut Frame, state: &AppState, theme: &Theme, area: ratat
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.muted))
         .title(Line::from(vec![
-            Span::styled("T", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
-            Span::styled("oken Flow ", Style::default().fg(theme.text)),
+            Span::styled("Token Flow ", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
             Span::styled("(last hour) ", Style::default().fg(theme.text_dim)),
             Span::styled("in", Style::default().fg(theme.secondary)),
             Span::styled("/", Style::default().fg(theme.muted)),
