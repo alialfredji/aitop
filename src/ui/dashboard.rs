@@ -102,8 +102,7 @@ fn render_metrics(f: &mut Frame, state: &AppState, theme: &Theme, area: ratatui:
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.muted))
         .title(Line::from(vec![
-            Span::styled("B", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
-            Span::styled("urn Rate ", Style::default().fg(theme.text)),
+            Span::styled("Burn Rate ", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
         ]));
 
     let inner = block.inner(area);
@@ -351,8 +350,7 @@ fn render_model_breakdown(f: &mut Frame, state: &AppState, theme: &Theme, area: 
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.muted))
         .title(Line::from(vec![
-            Span::styled("M", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
-            Span::styled("odels ", Style::default().fg(theme.text)),
+            Span::styled("Models ", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
         ]));
 
     let inner = block.inner(sub_areas.0);
@@ -413,8 +411,7 @@ fn render_project_costs(f: &mut Frame, state: &AppState, theme: &Theme, area: Re
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.muted))
         .title(Line::from(vec![
-            Span::styled("P", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
-            Span::styled("rojects ", Style::default().fg(theme.text)),
+            Span::styled("Projects ", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
         ]));
 
     let inner = block.inner(area);
@@ -467,8 +464,7 @@ fn render_active_sessions(f: &mut Frame, state: &AppState, theme: &Theme, area: 
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.muted))
         .title(Line::from(vec![
-            Span::styled("S", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
-            Span::styled("essions ", Style::default().fg(theme.text)),
+            Span::styled("Sessions ", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
         ]));
 
     let inner = block.inner(area);
@@ -524,8 +520,7 @@ fn render_activity_feed(f: &mut Frame, state: &AppState, theme: &Theme, area: ra
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.muted))
         .title(Line::from(vec![
-            Span::styled("R", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
-            Span::styled("ecent Activity ", Style::default().fg(theme.text)),
+            Span::styled("Recent Activity ", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
         ]));
 
     let inner = block.inner(area);
