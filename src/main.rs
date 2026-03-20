@@ -255,6 +255,7 @@ fn run_event_loop(
             break;
         }
 
+        state.advance_pulse();
         state.check_banner_timeout();
 
         let timeout = Duration::from_millis(100);
@@ -481,15 +482,16 @@ fn render_tab_bar(
     ];
 
     let (is_live, status_text) = state.live_status();
+    let pulse_char = state.pulse_indicator();
     let live_indicator = if is_live {
         let project_label = state.live_project.as_deref().unwrap_or("");
         if project_label.is_empty() {
-            format!(" \u{25CF} {} ", status_text)
+            format!(" {} {} ", pulse_char, status_text)
         } else {
-            format!(" \u{25CF} {} {} ", status_text, project_label)
+            format!(" {} {} {} ", pulse_char, status_text, project_label)
         }
     } else {
-        format!(" \u{25CB} {} ", status_text)
+        format!(" {} {} ", pulse_char, status_text)
     };
 
     let live_style = if is_live {

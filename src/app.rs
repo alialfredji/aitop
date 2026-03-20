@@ -100,6 +100,7 @@ pub struct AppState {
     // Live mode
     pub last_live_event: Option<Instant>,
     pub live_project: Option<String>,
+    pub pulse_tick: u8,
 
     // Control
     pub should_quit: bool,
@@ -160,6 +161,7 @@ impl AppState {
 
             last_live_event: None,
             live_project: None,
+            pulse_tick: 0,
 
             should_quit: false,
             needs_refresh: true,
@@ -171,6 +173,32 @@ impl AppState {
             Some(t) if t.elapsed().as_secs() < 60 => (true, "LIVE"),
             _ => (false, "IDLE"),
         }
+    }
+
+    /// Returns the animated pulse indicator character for the LIVE status.
+    /// Cycles through varying intensity dot characters based on pulse_tick.
+    pub fn pulse_indicator(&self) -> &str {
+        let (is_live, _) = self.live_status();
+        if !is_live {
+            return "\u{25CB}"; // ○ hollow circle for IDLE
+        }
+        // 8-frame pulse animation cycle
+        match self.pulse_tick % 8 {
+            0 => "\u{2219}",     // ∙ (dim)
+            1 => "\u{00B7}",     // · (small dot)
+            2 => "\u{2022}",     // • (bullet)
+            3 => "\u{25CF}",     // ● (full circle)
+            4 => "\u{2B24}",     // ⬤ (large circle)
+            5 => "\u{25CF}",     // ● (full circle)
+            6 => "\u{2022}",     // • (bullet)
+            7 => "\u{00B7}",     // · (small dot)
+            _ => "\u{25CF}",     // ● fallback
+        }
+    }
+
+    /// Advance the pulse tick counter (called each render cycle).
+    pub fn advance_pulse(&mut self) {
+        self.pulse_tick = self.pulse_tick.wrapping_add(1);
     }
 
     pub fn check_banner_timeout(&mut self) {
@@ -308,5 +336,91 @@ impl AppState {
 
     pub fn sort_indicator(&self) -> &str {
         if self.sort_ascending { " \u{25B2}" } else { " \u{25BC}" }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::Config;
+
+    fn test_state() -> AppState {
+        AppState::new(Config::default())
+    }
+
+    #[test]
+    fn test_pulse_tick_wraps() {
+        let mut state = test_state();
+        state.pulse_tick = 255;
+        state.advance_pulse();
+        assert_eq!(state.pulse_tick, 0);
+    }
+
+    #[test]
+    fn test_pulse_tick_advances() {
+        let mut state = test_state();
+        assert_eq!(state.pulse_tick, 0);
+        state.advance_pulse();
+        assert_eq!(state.pulse_tick, 1);
+        state.advance_pulse();
+        assert_eq!(state.pulse_tick, 2);
+    }
+
+    #[test]
+    fn test_pulse_indicator_idle() {
+        let state = test_state();
+        // No live event => IDLE
+        assert_eq!(state.pulse_indicator(), "\u{25CB}"); // ○
+    }
+
+    #[test]
+    fn test_pulse_indicator_live_cycles() {
+        let mut state = test_state();
+        state.last_live_event = Some(Instant::now());
+
+        // Collect indicators for one full cycle
+        let mut indicators = Vec::new();
+        for _ in 0..8 {
+            indicators.push(state.pulse_indicator().to_string());
+            state.advance_pulse();
+        }
+
+        // Should have 8 distinct frames (some may repeat due to symmetry)
+        assert_eq!(indicators.len(), 8);
+        // Frame 0 and 7 should be the same (dim dots)
+        // Frame 3 and 5 should be the same (full circle)
+        assert_eq!(indicators[3], indicators[5]);
+        // Frame 3 should be the full circle ●
+        assert_eq!(indicators[3], "\u{25CF}");
+    }
+
+    #[test]
+    fn test_pulse_indicator_periodicity() {
+        let mut state = test_state();
+        state.last_live_event = Some(Instant::now());
+
+        // After 8 ticks, should cycle back
+        let first = state.pulse_indicator().to_string();
+        for _ in 0..8 {
+            state.advance_pulse();
+        }
+        assert_eq!(state.pulse_indicator(), first);
+    }
+
+    #[test]
+    fn test_live_status_recent_event() {
+        let mut state = test_state();
+        state.last_live_event = Some(Instant::now());
+        let (is_live, label) = state.live_status();
+        assert!(is_live);
+        assert_eq!(label, "LIVE");
+    }
+
+    #[test]
+    fn test_live_status_no_event() {
+        let state = test_state();
+        let (is_live, label) = state.live_status();
+        assert!(!is_live);
+        assert_eq!(label, "IDLE");
     }
 }
