@@ -562,7 +562,7 @@ fn render_status_bar(
     secs_until_refresh: u64,
 ) {
     let left_text = format!(
-        "aitop v0.1.0 \u{2502} {} sessions \u{2502} ${:.2} all-time",
+        "aitop v0.4.0 \u{2502} {} sessions \u{2502} ${:.2} all-time",
         state.dashboard.total_sessions, state.dashboard.spend_all_time
     );
 
