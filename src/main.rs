@@ -244,16 +244,28 @@ fn run_event_loop(
 
         terminal.draw(|f| {
             let (tab_area, content_area, status_bar_area) = ui::layout::main_layout(f.area());
-            state.content_area = content_area;
             state.status_bar_area = status_bar_area;
 
             render_tab_bar(f, state, theme, tab_area);
 
-            match state.view {
-                View::Dashboard => ui::dashboard::render_dashboard(f, state, theme),
-                View::Sessions => ui::sessions::render_sessions(f, state, theme),
-                View::Models => ui::models::render_models(f, state, theme),
-                View::Trends => ui::trends::render_trends(f, state, theme),
+            if state.split_mode {
+                let (left_area, right_area) = ui::layout::split_content(content_area);
+
+                // Left pane: current view
+                state.content_area = left_area;
+                render_view(f, state, theme, state.view);
+
+                // Right pane: split view
+                if let Some(right_view) = state.split_view {
+                    state.content_area = right_area;
+                    render_view(f, state, theme, right_view);
+                }
+
+                // Restore content_area for other overlays
+                state.content_area = content_area;
+            } else {
+                state.content_area = content_area;
+                render_view(f, state, theme, state.view);
             }
 
             render_status_bar(f, state, theme, status_bar_area, secs_until);
@@ -371,8 +383,23 @@ fn handle_key(
 
         KeyCode::Char('?') | KeyCode::F(1) => state.show_help = true,
         KeyCode::Char('r') => state.needs_refresh = true,
+        KeyCode::Char('\\') => state.toggle_split(),
         KeyCode::Char('/') => {
             state.filter_active = true;
+        }
+
+        // Split pane: Shift+letter changes right pane view
+        KeyCode::Char('D') if state.split_mode => {
+            state.split_view = Some(View::Dashboard);
+        }
+        KeyCode::Char('S') if state.split_mode => {
+            state.split_view = Some(View::Sessions);
+        }
+        KeyCode::Char('M') if state.split_mode => {
+            state.split_view = Some(View::Models);
+        }
+        KeyCode::Char('T') if state.split_mode => {
+            state.split_view = Some(View::Trends);
         }
 
         KeyCode::Char('p') if state.view != View::Sessions => {
@@ -508,6 +535,20 @@ fn handle_trends_key(state: &mut AppState, key: event::KeyEvent) {
             state.needs_refresh = true;
         }
         _ => {}
+    }
+}
+
+fn render_view(
+    f: &mut ratatui::Frame,
+    state: &mut AppState,
+    theme: &ui::theme::Theme,
+    view: View,
+) {
+    match view {
+        View::Dashboard => ui::dashboard::render_dashboard(f, state, theme),
+        View::Sessions => ui::sessions::render_sessions(f, state, theme),
+        View::Models => ui::models::render_models(f, state, theme),
+        View::Trends => ui::trends::render_trends(f, state, theme),
     }
 }
 

@@ -99,6 +99,10 @@ pub struct AppState {
     pub last_live_event: Option<Instant>,
     pub live_project: Option<String>,
 
+    // Split panes
+    pub split_mode: bool,
+    pub split_view: Option<View>,
+
     // Session replay
     pub replay_active: bool,
     pub replay_index: usize,
@@ -162,6 +166,9 @@ impl AppState {
 
             last_live_event: None,
             live_project: None,
+
+            split_mode: false,
+            split_view: None,
 
             replay_active: false,
             replay_index: 0,
@@ -312,6 +319,22 @@ impl AppState {
 
     pub fn sort_indicator(&self) -> &str {
         if self.sort_ascending { " \u{25B2}" } else { " \u{25BC}" }
+    }
+
+    /// Toggle split mode on/off.
+    pub fn toggle_split(&mut self) {
+        self.split_mode = !self.split_mode;
+        if self.split_mode {
+            // Default right pane to a different view than current
+            self.split_view = Some(match self.view {
+                View::Dashboard => View::Sessions,
+                View::Sessions => View::Dashboard,
+                View::Models => View::Dashboard,
+                View::Trends => View::Dashboard,
+            });
+        } else {
+            self.split_view = None;
+        }
     }
 
     /// Enter replay mode for the current session detail.
@@ -541,6 +564,39 @@ mod tests {
         let (tokens, cost) = state.replay_running_totals();
         assert_eq!(tokens, 150 + 300 + 450); // + (300+150)
         assert!((cost - 0.06).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_split_toggle() {
+        let mut state = make_test_state();
+        assert!(!state.split_mode);
+        assert!(state.split_view.is_none());
+
+        state.toggle_split();
+        assert!(state.split_mode);
+        assert!(state.split_view.is_some());
+        // Default view is Dashboard, so split_view should be Sessions
+        assert_eq!(state.split_view, Some(View::Sessions));
+
+        state.toggle_split();
+        assert!(!state.split_mode);
+        assert!(state.split_view.is_none());
+    }
+
+    #[test]
+    fn test_split_default_view_differs() {
+        let mut state = make_test_state();
+
+        // When on Sessions, right pane should default to Dashboard
+        state.view = View::Sessions;
+        state.toggle_split();
+        assert_eq!(state.split_view, Some(View::Dashboard));
+        state.toggle_split();
+
+        // When on Models, right pane should default to Dashboard
+        state.view = View::Models;
+        state.toggle_split();
+        assert_eq!(state.split_view, Some(View::Dashboard));
     }
 
     #[test]
