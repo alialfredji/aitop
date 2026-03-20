@@ -63,6 +63,7 @@ pub struct AppState {
     pub models: Vec<ModelStats>,
     pub sessions: Vec<SessionSummary>,
     pub daily_spend: Vec<DailySpend>,
+    pub daily_tokens: Vec<DailyTokenCount>,
     pub token_flow: Vec<TokenFlowPoint>,
     pub activity: Vec<ActivityEntry>,
     pub cache_hit_ratio: f64,
@@ -93,6 +94,7 @@ pub struct AppState {
     pub session_sort: SessionSort,
     pub sort_ascending: bool,
     pub trend_range: TrendRange,
+    pub show_token_overlay: bool,
     pub theme_index: usize,
 
     // Live mode
@@ -127,6 +129,7 @@ impl AppState {
             models: Vec::new(),
             sessions: Vec::new(),
             daily_spend: Vec::new(),
+            daily_tokens: Vec::new(),
             token_flow: Vec::new(),
             activity: Vec::new(),
             cache_hit_ratio: 0.0,
@@ -152,6 +155,7 @@ impl AppState {
             session_sort: SessionSort::Recent,
             sort_ascending: false,
             trend_range: TrendRange::Month,
+            show_token_overlay: false,
             theme_index,
 
             last_live_event: None,
@@ -201,6 +205,9 @@ impl AppState {
         };
         if let Ok(spend) = agg.daily_spend(days) {
             self.daily_spend = spend;
+        }
+        if let Ok(tokens) = agg.daily_tokens(days) {
+            self.daily_tokens = tokens;
         }
         if let Ok(flow) = agg.token_flow_last_hour() {
             self.token_flow = flow;

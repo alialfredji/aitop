@@ -444,6 +444,9 @@ fn handle_trends_key(state: &mut AppState, key: event::KeyEvent) {
             state.trend_range = TrendRange::All;
             state.needs_refresh = true;
         }
+        KeyCode::Char('n') => {
+            state.show_token_overlay = !state.show_token_overlay;
+        }
         KeyCode::Left => {
             state.trend_range = match state.trend_range {
                 TrendRange::Month => TrendRange::Week,
@@ -533,7 +536,7 @@ fn render_status_bar(
         View::Dashboard => "d:dashboard  s:sessions  m:models  t:trends  ?:help  p:theme",
         View::Sessions => "j/k:navigate  c:cost  n:tokens  p:project  u:updated  /:filter  ?:help",
         View::Models => "d:dashboard  s:sessions  t:trends  p:theme  ?:help",
-        View::Trends => "w:week  o:month  a:all  \u{2190}\u{2192}:cycle  p:theme  ?:help",
+        View::Trends => "w:week  o:month  a:all  n:tokens  \u{2190}\u{2192}:cycle  p:theme  ?:help",
     };
 
     let right_text = format!("{}  \u{27f3} {}s", hints, secs_until_refresh);
