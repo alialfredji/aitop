@@ -1,8 +1,7 @@
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
-use ratatui::symbols;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Axis, Block, Borders, Chart, Dataset, GraphType, Paragraph, Row, Table};
+use ratatui::widgets::{Block, Borders, Paragraph, Row, Table};
 use ratatui::Frame;
 
 use super::format::{format_relative_time, format_tokens, shorten_model, truncate};
@@ -230,36 +229,102 @@ fn render_token_flow(f: &mut Frame, state: &AppState, theme: &Theme, area: ratat
         return;
     }
 
+    let inner = block.inner(area);
+    f.render_widget(block, area);
+
     let chart_data = prepare_token_flow_data(&state.token_flow);
     let y_max = chart_data.max_value * 1.2;
-    let x_max = (state.token_flow.len() as f64 - 1.0).max(1.0);
 
-    let input_dataset = Dataset::default()
-        .name("Input")
-        .marker(symbols::Marker::Braille)
-        .graph_type(GraphType::Line)
-        .style(Style::default().fg(theme.secondary))
-        .data(&chart_data.input_data);
+    // Render filled braille area chart (btop-style)
+    // Each braille character is a 2-col x 4-row dot grid
+    // Unicode braille: U+2800 base, dots are bits:
+    //   col0: row0=0x01, row1=0x02, row2=0x04, row3=0x40
+    //   col1: row0=0x08, row1=0x10, row2=0x20, row3=0x80
+    let w = inner.width as usize;
+    let h = inner.height as usize;
+    if w == 0 || h == 0 {
+        return;
+    }
 
-    let output_dataset = Dataset::default()
-        .name("Output")
-        .marker(symbols::Marker::Braille)
-        .graph_type(GraphType::Line)
-        .style(Style::default().fg(theme.tertiary))
-        .data(&chart_data.output_data);
+    let dot_cols = w * 2;   // 2 dots per character column
+    let dot_rows = h * 4;   // 4 dots per character row
 
-    let chart = Chart::new(vec![input_dataset, output_dataset])
-        .block(block)
-        .x_axis(
-            Axis::default()
-                .bounds([0.0, x_max]),
-        )
-        .y_axis(
-            Axis::default()
-                .bounds([0.0, y_max]),
-        );
+    // Interpolate data to fill the dot grid width
+    let n = chart_data.input_data.len();
+    let interpolate = |data: &[(f64, f64)], x: usize| -> f64 {
+        if n <= 1 {
+            return data.first().map(|d| d.1).unwrap_or(0.0);
+        }
+        let fx = x as f64 * (n - 1) as f64 / (dot_cols - 1).max(1) as f64;
+        let i = (fx as usize).min(n - 2);
+        let t = fx - i as f64;
+        data[i].1 * (1.0 - t) + data[i + 1].1 * t
+    };
 
-    f.render_widget(chart, area);
+    // Build braille grid: for each character cell, compute which dots are filled
+    let mut lines = Vec::with_capacity(h);
+
+    for char_row in 0..h {
+        let mut spans = Vec::new();
+        for char_col in 0..w {
+            let mut braille: u16 = 0x2800;
+
+            // Dot bit positions: [col][row] -> bit
+            let dot_bits: [[u16; 4]; 2] = [
+                [0x01, 0x02, 0x04, 0x40],  // left column
+                [0x08, 0x10, 0x20, 0x80],  // right column
+            ];
+
+            let mut has_input = false;
+            let mut has_output = false;
+
+            for (dc, col_bits) in dot_bits.iter().enumerate() {
+                let x = char_col * 2 + dc;
+                if x >= dot_cols { continue; }
+
+                let input_val = interpolate(&chart_data.input_data, x);
+                let output_val = interpolate(&chart_data.output_data, x);
+
+                // Convert value to dot-row height (0 = bottom, dot_rows-1 = top)
+                let input_height = if y_max > 0.0 { (input_val / y_max * dot_rows as f64).round() as usize } else { 0 };
+                let output_height = if y_max > 0.0 { (output_val / y_max * dot_rows as f64).round() as usize } else { 0 };
+
+                for (dr, &bit) in col_bits.iter().enumerate() {
+                    // This dot's position in the full grid (0 = top)
+                    let grid_row = char_row * 4 + dr;
+                    // Convert to bottom-up: dot_rows-1 - grid_row
+                    let from_bottom = dot_rows.saturating_sub(1).saturating_sub(grid_row);
+
+                    if from_bottom < input_height {
+                        braille |= bit;
+                        has_input = true;
+                    }
+                    if from_bottom < output_height {
+                        braille |= bit;
+                        has_output = true;
+                    }
+                }
+            }
+
+            let ch = char::from_u32(braille as u32).unwrap_or(' ');
+            // Color: input (secondary) takes priority, output (tertiary) when only output
+            let color = if has_input {
+                theme.secondary
+            } else if has_output {
+                theme.tertiary
+            } else {
+                theme.bar_empty
+            };
+
+            spans.push(Span::styled(
+                ch.to_string(),
+                Style::default().fg(color),
+            ));
+        }
+        lines.push(Line::from(spans));
+    }
+
+    f.render_widget(Paragraph::new(lines), inner);
 }
 
 fn render_model_breakdown(f: &mut Frame, state: &AppState, theme: &Theme, area: ratatui::layout::Rect) {
