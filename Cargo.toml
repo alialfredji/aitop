@@ -25,6 +25,7 @@ chrono = { version = "0.4", features = ["serde"] }
 clap = { version = "4", features = ["derive"] }
 urlencoding = "2"
 anyhow = "1"
+rayon = "1"
 
 [profile.release]
 opt-level = 3

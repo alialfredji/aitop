@@ -16,6 +16,7 @@ use crossterm::execute;
 use crossterm::terminal::{
     disable_raw_mode, enable_raw_mode, EnterAlternateScreen, LeaveAlternateScreen,
 };
+use rayon::prelude::*;
 use ratatui::backend::CrosstermBackend;
 use ratatui::layout::Rect;
 use ratatui::style::{Modifier, Style};
@@ -70,18 +71,49 @@ fn main() -> Result<()> {
 
     let total_files = files.len();
     if total_files > 0 {
-        for (i, file) in files.iter().enumerate() {
+        eprint!("\r  Indexing sessions... (parsing {} files)", total_files);
+        io::stderr().flush().ok();
+
+        // Pre-fetch file offsets sequentially (DB reads are cheap)
+        let file_offsets: Vec<_> = files
+            .iter()
+            .map(|file| {
+                let path_str = file.path.to_string_lossy().to_string();
+                db.get_file_offset(&path_str).unwrap_or(0)
+            })
+            .collect();
+
+        // Phase 1: Read file contents and parse in parallel (CPU-bound, no DB access)
+        let parsed_files: Vec<_> = files
+            .par_iter()
+            .zip(file_offsets.par_iter())
+            .filter_map(|(file, &offset)| {
+                let content = std::fs::read(&file.path).ok()?;
+                if (offset as usize) >= content.len() {
+                    return None; // already up to date
+                }
+                let results = data::parser::parse_file_content(&content, offset, &file.project);
+                if results.is_empty() {
+                    return None;
+                }
+                Some((file, content.len() as u64, results))
+            })
+            .collect();
+
+        // Phase 2: Write to DB sequentially (SQLite single-writer constraint)
+        for (i, (file, new_offset, results)) in parsed_files.iter().enumerate() {
             eprint!(
                 "\r  Indexing sessions... ({}/{} files)",
                 i + 1,
-                total_files
+                parsed_files.len()
             );
             io::stderr().flush().ok();
 
-            if let Err(e) = db.ingest_file(file) {
-                eprintln!("\nWarning: failed to ingest {:?}: {}", file.path, e);
+            if let Err(e) = db.write_parsed_results(file, *new_offset, results) {
+                eprintln!("\nWarning: failed to write {:?}: {}", file.path, e);
             }
         }
+
         eprint!("\r{}\r", " ".repeat(60));
         io::stderr().flush().ok();
     }
