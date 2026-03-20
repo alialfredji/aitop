@@ -6,6 +6,7 @@ use ratatui::widgets::{Axis, Block, Borders, Chart, Dataset, GraphType, Paragrap
 use ratatui::Frame;
 
 use super::theme::Theme;
+use super::widgets::title::{panel_title, shortcut_title};
 use crate::app::{AppState, ChartType, TrendRange};
 
 pub fn render_trends(f: &mut Frame, state: &AppState, theme: &Theme) {
@@ -44,26 +45,28 @@ fn render_chart(f: &mut Frame, state: &AppState, theme: &Theme, area: ratatui::l
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.muted))
-        .title(Line::from(vec![
-            Span::styled("T", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
-            Span::styled("rends ", Style::default().fg(theme.text)),
-            Span::styled(format!("({}, {}) ", range_label, chart_label), Style::default().fg(theme.text_dim)),
-            Span::styled(overlay_label, Style::default().fg(theme.secondary)),
-            Span::styled("  ", Style::default()),
-            Span::styled("w", Style::default().fg(theme.tertiary).add_modifier(Modifier::UNDERLINED)),
-            Span::styled("eek ", Style::default().fg(theme.text_dim)),
-            Span::styled("m", Style::default().fg(theme.text_dim)),
-            Span::styled("o", Style::default().fg(theme.tertiary).add_modifier(Modifier::UNDERLINED)),
-            Span::styled("nth ", Style::default().fg(theme.text_dim)),
-            Span::styled("a", Style::default().fg(theme.tertiary).add_modifier(Modifier::UNDERLINED)),
-            Span::styled("ll ", Style::default().fg(theme.text_dim)),
-            Span::styled("b", Style::default().fg(theme.tertiary).add_modifier(Modifier::UNDERLINED)),
-            Span::styled("ar/line ", Style::default().fg(theme.text_dim)),
-            Span::styled("n", Style::default().fg(theme.tertiary).add_modifier(Modifier::UNDERLINED)),
-            Span::styled("toks ", Style::default().fg(theme.text_dim)),
-            Span::styled("\u{2190}\u{2192}", Style::default().fg(theme.tertiary)),
-            Span::styled(" cycle ", Style::default().fg(theme.text_dim)),
-        ]));
+        .title({
+            let mut t = shortcut_title('T', "rends ", theme).spans;
+            t.extend([
+                Span::styled(format!("({}, {}) ", range_label, chart_label), Style::default().fg(theme.text_dim)),
+                Span::styled(overlay_label, Style::default().fg(theme.secondary)),
+                Span::styled("  ", Style::default()),
+                Span::styled("w", Style::default().fg(theme.tertiary).add_modifier(Modifier::UNDERLINED)),
+                Span::styled("eek ", Style::default().fg(theme.text_dim)),
+                Span::styled("m", Style::default().fg(theme.text_dim)),
+                Span::styled("o", Style::default().fg(theme.tertiary).add_modifier(Modifier::UNDERLINED)),
+                Span::styled("nth ", Style::default().fg(theme.text_dim)),
+                Span::styled("a", Style::default().fg(theme.tertiary).add_modifier(Modifier::UNDERLINED)),
+                Span::styled("ll ", Style::default().fg(theme.text_dim)),
+                Span::styled("b", Style::default().fg(theme.tertiary).add_modifier(Modifier::UNDERLINED)),
+                Span::styled("ar/line ", Style::default().fg(theme.text_dim)),
+                Span::styled("n", Style::default().fg(theme.tertiary).add_modifier(Modifier::UNDERLINED)),
+                Span::styled("toks ", Style::default().fg(theme.text_dim)),
+                Span::styled("\u{2190}\u{2192}", Style::default().fg(theme.tertiary)),
+                Span::styled(" cycle ", Style::default().fg(theme.text_dim)),
+            ]);
+            Line::from(t)
+        });
 
     if state.daily_spend.is_empty() {
         f.render_widget(
@@ -272,10 +275,11 @@ fn render_heatmap(f: &mut Frame, state: &AppState, theme: &Theme, area: ratatui:
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.muted))
-        .title(Line::from(vec![
-            Span::styled(" Time-of-Day ", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
-            Span::styled("Heatmap ", Style::default().fg(theme.text_dim)),
-        ]));
+        .title({
+            let mut t = panel_title(" Time-of-Day ", theme).spans;
+            t.push(Span::styled("Heatmap ", Style::default().fg(theme.text_dim)));
+            Line::from(t)
+        });
 
     let inner = block.inner(area);
     f.render_widget(block, area);
@@ -355,10 +359,11 @@ fn render_contribution_calendar(f: &mut Frame, state: &AppState, theme: &Theme, 
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.muted))
-        .title(Line::from(vec![
-            Span::styled(" Contribution ", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
-            Span::styled("Calendar (12 weeks) ", Style::default().fg(theme.text_dim)),
-        ]));
+        .title({
+            let mut t = panel_title(" Contribution ", theme).spans;
+            t.push(Span::styled("Calendar (12 weeks) ", Style::default().fg(theme.text_dim)));
+            Line::from(t)
+        });
 
     let inner = block.inner(area);
     f.render_widget(block, area);

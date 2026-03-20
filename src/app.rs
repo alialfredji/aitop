@@ -121,6 +121,8 @@ pub struct AppState {
 
     // Budget notification tracking
     pub notified_thresholds: HashSet<u8>,
+    /// In-TUI alert banner (message, timestamp). Renders as a shimmer in the tab bar.
+    pub alert_flash: Option<(String, Instant)>,
 
     // Session replay
     pub replay_active: bool,
@@ -198,6 +200,7 @@ impl AppState {
             copy_flash: None,
 
             notified_thresholds: HashSet::new(),
+            alert_flash: None,
 
             replay_active: false,
             replay_index: 0,
@@ -401,6 +404,11 @@ impl AppState {
                 budget,
             );
             send_desktop_notification("aitop Budget Alert", &msg);
+            // In-TUI shimmer alert + terminal bell
+            let alert = format!("\u{26a0} {}% budget — ${:.2}/${:.0}", threshold, self.dashboard.spend_today, budget);
+            self.alert_flash = Some((alert.clone(), Instant::now()));
+            ring_terminal_bell();
+            set_terminal_title(&format!("aitop \u{26a0} {}% budget", threshold));
             self.notified_thresholds.insert(threshold);
         }
 
@@ -519,11 +527,47 @@ pub fn check_budget_thresholds(
         .collect()
 }
 
+/// Ensure the notification icon is written to the config directory.
+/// Returns the path if successful.
+fn ensure_notification_icon() -> Option<std::path::PathBuf> {
+    static ICON_BYTES: &[u8] = include_bytes!("../assets/icon.png");
+    let config_dir = dirs::config_dir()?.join("aitop");
+    let icon_path = config_dir.join("icon.png");
+    if icon_path.exists() {
+        return Some(icon_path);
+    }
+    std::fs::create_dir_all(&config_dir).ok()?;
+    std::fs::write(&icon_path, ICON_BYTES).ok()?;
+    Some(icon_path)
+}
+
 /// Send a desktop notification using platform-specific commands.
+/// On macOS, tries terminal-notifier (with icon) first, falls back to osascript.
+/// On Linux, uses notify-send with icon.
 pub fn send_desktop_notification(title: &str, message: &str) -> bool {
+    let icon_path = ensure_notification_icon();
+
     #[cfg(target_os = "macos")]
     {
         use std::process::Command;
+        // Try terminal-notifier first (supports custom icon)
+        if let Some(ref icon) = icon_path {
+            if let Ok(status) = Command::new("terminal-notifier")
+                .args([
+                    "-title", title,
+                    "-message", message,
+                    "-appIcon", &icon.display().to_string(),
+                    "-group", "aitop",
+                    "-ignoreDnD",
+                ])
+                .output()
+            {
+                if status.status.success() {
+                    return true;
+                }
+            }
+        }
+        // Fallback to osascript
         let script = format!(
             "display notification \"{}\" with title \"{}\"",
             message.replace('"', "\\\""),
@@ -537,11 +581,45 @@ pub fn send_desktop_notification(title: &str, message: &str) -> bool {
     #[cfg(not(target_os = "macos"))]
     {
         use std::process::Command;
+        let mut args = vec![title.to_string(), message.to_string()];
+        if let Some(ref icon) = icon_path {
+            args.insert(0, "-i".to_string());
+            args.insert(1, icon.display().to_string());
+        }
+        let arg_refs: Vec<&str> = args.iter().map(|s| s.as_str()).collect();
         Command::new("notify-send")
-            .args([title, message])
+            .args(&arg_refs)
             .output()
             .is_ok()
     }
+}
+
+/// Ring the terminal bell (BEL character).
+/// Makes the tab/window flash in Ghostty, iTerm2, kitty, and most terminals.
+pub fn ring_terminal_bell() {
+    use std::io::Write;
+    let _ = std::io::stdout().write_all(b"\x07");
+    let _ = std::io::stdout().flush();
+}
+
+/// Set the terminal window/tab title via OSC escape sequence.
+/// Works directly in most terminals; uses DCS passthrough for tmux.
+pub fn set_terminal_title(title: &str) {
+    use std::io::Write;
+    let in_tmux = std::env::var("TMUX").is_ok();
+    if in_tmux {
+        // tmux DCS passthrough: \x1bPtmux;\x1b<ESC_SEQ>\x1b\\
+        let _ = write!(std::io::stdout(), "\x1bPtmux;\x1b\x1b]2;{}\x07\x1b\\", title);
+    } else {
+        // Standard OSC 2 (set window title)
+        let _ = write!(std::io::stdout(), "\x1b]2;{}\x07", title);
+    }
+    let _ = std::io::stdout().flush();
+}
+
+/// Reset the terminal title back to default.
+pub fn reset_terminal_title() {
+    set_terminal_title("aitop");
 }
 
 /// Format a single session as a human-readable clipboard string.

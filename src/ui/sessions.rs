@@ -6,6 +6,7 @@ use ratatui::Frame;
 
 use super::format::{format_relative_time, format_tokens, shorten_model, truncate};
 use super::theme::Theme;
+use super::widgets::title::shortcut_title;
 use crate::app::{AppState, SessionSort};
 
 pub fn render_sessions(f: &mut Frame, state: &mut AppState, theme: &Theme) {
@@ -26,27 +27,29 @@ pub fn render_sessions(f: &mut Frame, state: &mut AppState, theme: &Theme) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.muted))
-        .title(Line::from(vec![
-            Span::styled("S", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
-            Span::styled("essions ", Style::default().fg(theme.text)),
-            Span::styled(
-                format!("({}) ", state.displayed_sessions().len()),
-                Style::default().fg(theme.text_dim),
-            ),
-            Span::styled(
-                filter_label,
-                Style::default().fg(theme.tertiary),
-            ),
-            Span::raw("  "),
-            Span::styled("c", Style::default().fg(theme.tertiary).add_modifier(Modifier::UNDERLINED)),
-            Span::styled(format!("ost{} ", cost_suffix), Style::default().fg(theme.text_dim)),
-            Span::styled("n", Style::default().fg(theme.tertiary).add_modifier(Modifier::UNDERLINED)),
-            Span::styled(format!("tokens{} ", tokens_suffix), Style::default().fg(theme.text_dim)),
-            Span::styled("p", Style::default().fg(theme.tertiary).add_modifier(Modifier::UNDERLINED)),
-            Span::styled(format!("roject{} ", project_suffix), Style::default().fg(theme.text_dim)),
-            Span::styled("u", Style::default().fg(theme.tertiary).add_modifier(Modifier::UNDERLINED)),
-            Span::styled(format!("pdated{} ", updated_suffix), Style::default().fg(theme.text_dim)),
-        ]));
+        .title({
+            let mut t = shortcut_title('S', "essions ", theme).spans;
+            t.extend([
+                Span::styled(
+                    format!("({}) ", state.displayed_sessions().len()),
+                    Style::default().fg(theme.text_dim),
+                ),
+                Span::styled(
+                    filter_label,
+                    Style::default().fg(theme.tertiary),
+                ),
+                Span::raw("  "),
+                Span::styled("c", Style::default().fg(theme.tertiary).add_modifier(Modifier::UNDERLINED)),
+                Span::styled(format!("ost{} ", cost_suffix), Style::default().fg(theme.text_dim)),
+                Span::styled("n", Style::default().fg(theme.tertiary).add_modifier(Modifier::UNDERLINED)),
+                Span::styled(format!("tokens{} ", tokens_suffix), Style::default().fg(theme.text_dim)),
+                Span::styled("p", Style::default().fg(theme.tertiary).add_modifier(Modifier::UNDERLINED)),
+                Span::styled(format!("roject{} ", project_suffix), Style::default().fg(theme.text_dim)),
+                Span::styled("u", Style::default().fg(theme.tertiary).add_modifier(Modifier::UNDERLINED)),
+                Span::styled(format!("pdated{} ", updated_suffix), Style::default().fg(theme.text_dim)),
+            ]);
+            Line::from(t)
+        });
 
     let header = Row::new(vec![
         "#", "Project", "Model", "Tokens", "Cost", "Msgs", "7d", "Updated",

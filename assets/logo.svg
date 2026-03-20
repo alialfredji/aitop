@@ -1,0 +1,68 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0.5" y2="1">
+      <stop offset="0%" stop-color="#181926"/>
+      <stop offset="100%" stop-color="#12131e"/>
+    </linearGradient>
+    <linearGradient id="areaGrad" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0%" stop-color="#e8956a" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#e8956a" stop-opacity="0.05"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background -->
+  <rect x="32" y="32" width="448" height="448" rx="76" ry="76"
+        fill="url(#bg)" stroke="#2a2c3e" stroke-width="1.5"/>
+
+  <!-- Grid lines -->
+  <g stroke="#222438" stroke-width="1.5">
+    <line x1="76" y1="130" x2="436" y2="130"/>
+    <line x1="76" y1="190" x2="436" y2="190"/>
+    <line x1="76" y1="250" x2="436" y2="250"/>
+    <line x1="76" y1="310" x2="436" y2="310"/>
+  </g>
+
+  <!-- Filled area (solid, no filter) -->
+  <path d="M76,340 L132,315 L188,326 L256,235 L312,165 L362,120 L410,98 L436,112 L436,340 Z"
+        fill="url(#areaGrad)"/>
+
+  <!-- Secondary area (input tokens - dimmer) -->
+  <path d="M76,340 L132,332 L188,336 L256,300 L312,270 L362,248 L410,235 L436,240 L436,340 Z"
+        fill="#6aade8" fill-opacity="0.15"/>
+
+  <!-- Chart line (thick, solid color) -->
+  <polyline points="76,340 132,315 188,326 256,235 312,165 362,120 410,98 436,112"
+           fill="none" stroke="#e8956a" stroke-width="8" stroke-linecap="round"
+           stroke-linejoin="round"/>
+
+  <!-- Glow line behind (wider, transparent) -->
+  <polyline points="76,340 132,315 188,326 256,235 312,165 362,120 410,98 436,112"
+           fill="none" stroke="#e8956a" stroke-width="18" stroke-linecap="round"
+           stroke-linejoin="round" opacity="0.15"/>
+
+  <!-- Data points -->
+  <circle cx="256" cy="235" r="6" fill="#181926" stroke="#e8956a" stroke-width="3"/>
+  <circle cx="312" cy="165" r="6" fill="#181926" stroke="#e8956a" stroke-width="3"/>
+  <circle cx="362" cy="120" r="7" fill="#181926" stroke="#e8956a" stroke-width="3.5"/>
+  <!-- Peak point (bright) -->
+  <circle cx="410" cy="98" r="9" fill="#181926" stroke="#f0b888" stroke-width="4"/>
+  <circle cx="410" cy="98" r="4" fill="#f0b888"/>
+
+  <!-- "ai" -->
+  <text x="94" y="436" font-family="'SF Mono','Menlo','Consolas',monospace" font-size="88"
+        font-weight="800" fill="#e8956a">ai</text>
+
+  <!-- "top" -->
+  <text x="240" y="436" font-family="'SF Mono','Menlo','Consolas',monospace" font-size="88"
+        font-weight="400" fill="#5c5e78">top</text>
+
+  <!-- Braille dots -->
+  <g opacity="0.65">
+    <circle cx="404" cy="386" r="3.2" fill="#44465c"/>
+    <circle cx="404" cy="402" r="3.2" fill="#44465c"/>
+    <circle cx="404" cy="418" r="3.2" fill="#44465c"/>
+    <circle cx="420" cy="386" r="3.2" fill="#44465c"/>
+    <circle cx="420" cy="402" r="3.2" fill="#e8956a"/>
+    <circle cx="420" cy="418" r="3.2" fill="#44465c"/>
+  </g>
+</svg>

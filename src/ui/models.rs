@@ -6,6 +6,7 @@ use ratatui::Frame;
 use super::format::{format_tokens, shorten_model};
 use super::theme::Theme;
 use super::widgets::cost_color::cost_color;
+use super::widgets::title::shortcut_title;
 use crate::app::AppState;
 
 pub fn render_models(f: &mut Frame, state: &AppState, theme: &Theme) {
@@ -14,10 +15,7 @@ pub fn render_models(f: &mut Frame, state: &AppState, theme: &Theme) {
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.muted))
-        .title(Line::from(vec![
-            Span::styled("M", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
-            Span::styled("odels ", Style::default().fg(theme.text)),
-        ]));
+        .title(shortcut_title('M', "odels ", theme));
 
     let inner = block.inner(area);
     f.render_widget(block, area);

@@ -8,6 +8,7 @@ use super::format::{format_relative_time, format_tokens, shorten_model, truncate
 use super::layout::{dashboard_layout, layout_tier, LayoutTier};
 use super::theme::Theme;
 use super::widgets::cost_color::cost_color;
+use super::widgets::title::panel_title;
 use crate::app::AppState;
 
 pub fn render_dashboard(f: &mut Frame, state: &AppState, theme: &Theme) {
@@ -101,9 +102,7 @@ fn render_metrics(f: &mut Frame, state: &AppState, theme: &Theme, area: ratatui:
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.muted))
-        .title(Line::from(vec![
-            Span::styled("Burn Rate ", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
-        ]));
+        .title(panel_title("Burn Rate ", theme));
 
     let inner = block.inner(area);
     f.render_widget(block, area);
@@ -209,13 +208,16 @@ fn render_token_flow(f: &mut Frame, state: &AppState, theme: &Theme, area: ratat
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.muted))
-        .title(Line::from(vec![
-            Span::styled("Token Flow ", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
-            Span::styled("(last hour) ", Style::default().fg(theme.text_dim)),
-            Span::styled("in", Style::default().fg(theme.secondary)),
-            Span::styled("/", Style::default().fg(theme.muted)),
-            Span::styled("out", Style::default().fg(theme.tertiary)),
-        ]));
+        .title({
+            let mut t = panel_title("Token Flow ", theme).spans;
+            t.extend([
+                Span::styled("(last hour) ", Style::default().fg(theme.text_dim)),
+                Span::styled("in", Style::default().fg(theme.secondary)),
+                Span::styled("/", Style::default().fg(theme.muted)),
+                Span::styled("out", Style::default().fg(theme.tertiary)),
+            ]);
+            Line::from(t)
+        });
 
     if state.token_flow.is_empty() {
         f.render_widget(
@@ -349,9 +351,7 @@ fn render_model_breakdown(f: &mut Frame, state: &AppState, theme: &Theme, area: 
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.muted))
-        .title(Line::from(vec![
-            Span::styled("Models ", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
-        ]));
+        .title(panel_title("Models ", theme));
 
     let inner = block.inner(sub_areas.0);
     f.render_widget(block, sub_areas.0);
@@ -410,9 +410,7 @@ fn render_project_costs(f: &mut Frame, state: &AppState, theme: &Theme, area: Re
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.muted))
-        .title(Line::from(vec![
-            Span::styled("Projects ", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
-        ]));
+        .title(panel_title("Projects ", theme));
 
     let inner = block.inner(area);
     f.render_widget(block, area);
@@ -463,9 +461,7 @@ fn render_active_sessions(f: &mut Frame, state: &AppState, theme: &Theme, area: 
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.muted))
-        .title(Line::from(vec![
-            Span::styled("Sessions ", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
-        ]));
+        .title(panel_title("Sessions ", theme));
 
     let inner = block.inner(area);
     f.render_widget(block, area);
@@ -519,9 +515,7 @@ fn render_activity_feed(f: &mut Frame, state: &AppState, theme: &Theme, area: ra
     let block = Block::default()
         .borders(Borders::ALL)
         .border_style(Style::default().fg(theme.muted))
-        .title(Line::from(vec![
-            Span::styled("Recent Activity ", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD)),
-        ]));
+        .title(panel_title("Recent Activity ", theme));
 
     let inner = block.inner(area);
     f.render_widget(block, area);

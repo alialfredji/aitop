@@ -378,6 +378,14 @@ fn run_event_loop(
         state.advance_pulse();
         state.check_banner_timeout();
 
+        // Clear expired alert shimmer and reset terminal title
+        if let Some((_, t)) = &state.alert_flash {
+            if t.elapsed().as_secs() >= 5 {
+                state.alert_flash = None;
+                aitop::app::reset_terminal_title();
+            }
+        }
+
         // Replay auto-advance
         if state.replay_active && !state.replay_paused {
             let replay_interval = Duration::from_millis(1000 / state.replay_speed as u64);
@@ -722,6 +730,17 @@ fn render_tab_bar(
 
     let (is_live, status_text) = state.live_status();
     let pulse_char = state.pulse_indicator();
+
+    // Check for active alert shimmer (5-second duration)
+    let alert_info = state.alert_flash.as_ref().and_then(|(msg, t)| {
+        let elapsed = t.elapsed();
+        if elapsed.as_secs() < 5 {
+            Some((msg.clone(), elapsed))
+        } else {
+            None
+        }
+    });
+
     let live_indicator = if is_live {
         let project_label = state.live_project.as_deref().unwrap_or("");
         if project_label.is_empty() {
@@ -739,18 +758,37 @@ fn render_tab_bar(
         Style::default().fg(theme.muted)
     };
 
+    // Right-aligned content: alert shimmer takes priority over live indicator
+    let right_title = if let Some((ref alert_msg, elapsed)) = alert_info {
+        // Shimmer: pulse between danger and accent based on tick
+        let phase = (elapsed.as_millis() / 300) % 2;
+        let alert_color = if phase == 0 { theme.danger } else { theme.tertiary };
+        let alert_style = Style::default()
+            .fg(alert_color)
+            .add_modifier(Modifier::BOLD);
+        Line::from(Span::styled(format!(" {} ", alert_msg), alert_style)).right_aligned()
+    } else {
+        Line::from(Span::styled(live_indicator, live_style)).right_aligned()
+    };
+
+    // Border color shimmers during alert
+    let border_color = if alert_info.is_some() {
+        let phase = (state.pulse_tick / 2) % 2;
+        if phase == 0 { theme.danger } else { theme.tertiary }
+    } else {
+        theme.muted
+    };
+
     let tabs = Tabs::new(tab_titles)
         .block(
             Block::default()
                 .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.muted))
+                .border_style(Style::default().fg(border_color))
                 .title(Span::styled(
                     " aitop ",
                     Style::default().fg(theme.accent).add_modifier(Modifier::BOLD),
                 ))
-                .title(
-                    Line::from(Span::styled(live_indicator, live_style)).right_aligned(),
-                ),
+                .title(right_title),
         )
         .select(state.view.index())
         .highlight_style(
