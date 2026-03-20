@@ -303,3 +303,33 @@ impl AppState {
         if self.sort_ascending { " \u{25B2}" } else { " \u{25BC}" }
     }
 }
+
+/// Format a compact one-line tmux status bar string from dashboard stats.
+pub fn format_tmux_status(burn_rate: f64, spend_today: f64, total_sessions: i64) -> String {
+    format!(
+        "#[fg=colour208]aitop:#[fg=colour255] ${:.2}/hr #[fg=colour240]|#[fg=colour255] ${:.2} today #[fg=colour240]|#[fg=colour255] {} sessions",
+        burn_rate, spend_today, total_sessions
+    )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_tmux_status_format() {
+        let output = format_tmux_status(1.23, 45.67, 12);
+        assert!(output.contains("$1.23/hr"), "should contain burn rate");
+        assert!(output.contains("$45.67 today"), "should contain today's spend");
+        assert!(output.contains("12 sessions"), "should contain session count");
+        assert!(output.contains("#[fg="), "should contain tmux color codes");
+    }
+
+    #[test]
+    fn test_tmux_status_zero_values() {
+        let output = format_tmux_status(0.0, 0.0, 0);
+        assert!(output.contains("$0.00/hr"));
+        assert!(output.contains("$0.00 today"));
+        assert!(output.contains("0 sessions"));
+    }
+}

@@ -46,6 +46,10 @@ struct Args {
     #[arg(long)]
     light: bool,
 
+    /// Output compact one-line summary for tmux status bar
+    #[arg(long)]
+    tmux_status: bool,
+
     /// Filter by project name
     #[arg(short, long)]
     project: Option<String>,
@@ -89,6 +93,11 @@ fn main() -> Result<()> {
     if args.light {
         drop(db);
         return print_light_mode(&db_path);
+    }
+
+    if args.tmux_status {
+        drop(db);
+        return print_tmux_status(&db_path);
     }
 
     run_tui(config, db, &db_path, &projects_dir)
@@ -135,6 +144,16 @@ fn print_light_mode(db_path: &std::path::Path) -> Result<()> {
     );
     println!();
 
+    Ok(())
+}
+
+fn print_tmux_status(db_path: &std::path::Path) -> Result<()> {
+    let agg = Aggregator::open(db_path)?;
+    let stats = agg.dashboard_stats()?;
+    print!(
+        "{}",
+        app::format_tmux_status(stats.burn_rate_per_hour, stats.spend_today, stats.total_sessions)
+    );
     Ok(())
 }
 
