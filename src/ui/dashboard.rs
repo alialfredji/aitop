@@ -1,7 +1,8 @@
 use ratatui::layout::{Constraint, Direction, Layout, Rect};
 use ratatui::style::{Modifier, Style};
+use ratatui::symbols;
 use ratatui::text::{Line, Span};
-use ratatui::widgets::{Block, Borders, Paragraph, Row, Sparkline, Table};
+use ratatui::widgets::{Axis, Block, Borders, Chart, Dataset, GraphType, Paragraph, Row, Table};
 use ratatui::Frame;
 
 use super::layout::{dashboard_layout, layout_tier, LayoutTier};
@@ -206,27 +207,58 @@ fn render_metrics(f: &mut Frame, state: &AppState, theme: &Theme, area: ratatui:
 }
 
 fn render_token_flow(f: &mut Frame, state: &AppState, theme: &Theme, area: ratatui::layout::Rect) {
-    let data: Vec<u64> = if state.token_flow.is_empty() {
-        vec![0; 60]
-    } else {
-        state.token_flow.iter().map(|p| p.total_tokens as u64).collect()
-    };
+    let block = Block::default()
+        .borders(Borders::ALL)
+        .border_style(Style::default().fg(theme.muted))
+        .title(Line::from(vec![
+            Span::styled(" T", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
+            Span::styled("oken Flow ", Style::default().fg(theme.text)),
+            Span::styled("(last hour) ", Style::default().fg(theme.text_dim)),
+            Span::styled("in", Style::default().fg(theme.secondary)),
+            Span::styled("/", Style::default().fg(theme.muted)),
+            Span::styled("out", Style::default().fg(theme.tertiary)),
+        ]));
 
-    let sparkline = Sparkline::default()
-        .block(
-            Block::default()
-                .borders(Borders::ALL)
-                .border_style(Style::default().fg(theme.muted))
-                .title(Line::from(vec![
-                    Span::styled(" T", Style::default().fg(theme.accent).add_modifier(Modifier::BOLD | Modifier::UNDERLINED)),
-                    Span::styled("oken Flow ", Style::default().fg(theme.text)),
-                    Span::styled("(last hour) ", Style::default().fg(theme.text_dim)),
-                ])),
+    if state.token_flow.is_empty() {
+        f.render_widget(
+            Paragraph::new("  No token flow data")
+                .style(Style::default().fg(theme.text_dim))
+                .block(block),
+            area,
+        );
+        return;
+    }
+
+    let chart_data = prepare_token_flow_data(&state.token_flow);
+    let y_max = chart_data.max_value * 1.2;
+    let x_max = (state.token_flow.len() as f64 - 1.0).max(1.0);
+
+    let input_dataset = Dataset::default()
+        .name("Input")
+        .marker(symbols::Marker::Braille)
+        .graph_type(GraphType::Line)
+        .style(Style::default().fg(theme.secondary))
+        .data(&chart_data.input_data);
+
+    let output_dataset = Dataset::default()
+        .name("Output")
+        .marker(symbols::Marker::Braille)
+        .graph_type(GraphType::Line)
+        .style(Style::default().fg(theme.tertiary))
+        .data(&chart_data.output_data);
+
+    let chart = Chart::new(vec![input_dataset, output_dataset])
+        .block(block)
+        .x_axis(
+            Axis::default()
+                .bounds([0.0, x_max]),
         )
-        .data(&data)
-        .style(Style::default().fg(theme.secondary));
+        .y_axis(
+            Axis::default()
+                .bounds([0.0, y_max]),
+        );
 
-    f.render_widget(sparkline, area);
+    f.render_widget(chart, area);
 }
 
 fn render_model_breakdown(f: &mut Frame, state: &AppState, theme: &Theme, area: ratatui::layout::Rect) {
@@ -503,5 +535,126 @@ fn format_relative_time(iso: &str) -> String {
         format!("{}h ago", diff.num_hours())
     } else {
         format!("{}d ago", diff.num_days())
+    }
+}
+
+/// Prepared dual-line chart data for the token flow widget.
+pub struct TokenFlowChartData {
+    pub input_data: Vec<(f64, f64)>,
+    pub output_data: Vec<(f64, f64)>,
+    pub max_value: f64,
+}
+
+/// Prepare dual-line chart data from token flow points.
+pub fn prepare_token_flow_data(
+    flow: &[crate::data::aggregator::TokenFlowPoint],
+) -> TokenFlowChartData {
+    if flow.is_empty() {
+        return TokenFlowChartData {
+            input_data: vec![(0.0, 0.0)],
+            output_data: vec![(0.0, 0.0)],
+            max_value: 1.0,
+        };
+    }
+
+    let input_data: Vec<(f64, f64)> = flow
+        .iter()
+        .enumerate()
+        .map(|(i, p)| (i as f64, p.input_tokens as f64))
+        .collect();
+
+    let output_data: Vec<(f64, f64)> = flow
+        .iter()
+        .enumerate()
+        .map(|(i, p)| (i as f64, p.output_tokens as f64))
+        .collect();
+
+    let max_val = flow
+        .iter()
+        .map(|p| p.input_tokens.max(p.output_tokens))
+        .max()
+        .unwrap_or(1) as f64;
+
+    TokenFlowChartData {
+        input_data,
+        output_data,
+        max_value: max_val.max(1.0),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::data::aggregator::TokenFlowPoint;
+
+    #[test]
+    fn test_prepare_token_flow_empty() {
+        let data = prepare_token_flow_data(&[]);
+        assert_eq!(data.input_data.len(), 1);
+        assert_eq!(data.output_data.len(), 1);
+        assert_eq!(data.max_value, 1.0);
+    }
+
+    #[test]
+    fn test_prepare_token_flow_single_point() {
+        let flow = vec![TokenFlowPoint {
+            minute: "12:00".to_string(),
+            input_tokens: 100,
+            output_tokens: 50,
+            total_tokens: 150,
+        }];
+        let data = prepare_token_flow_data(&flow);
+        assert_eq!(data.input_data.len(), 1);
+        assert_eq!(data.output_data.len(), 1);
+        assert_eq!(data.input_data[0], (0.0, 100.0));
+        assert_eq!(data.output_data[0], (0.0, 50.0));
+        assert_eq!(data.max_value, 100.0);
+    }
+
+    #[test]
+    fn test_prepare_token_flow_multiple_points() {
+        let flow = vec![
+            TokenFlowPoint {
+                minute: "12:00".to_string(),
+                input_tokens: 100,
+                output_tokens: 200,
+                total_tokens: 300,
+            },
+            TokenFlowPoint {
+                minute: "12:01".to_string(),
+                input_tokens: 300,
+                output_tokens: 100,
+                total_tokens: 400,
+            },
+            TokenFlowPoint {
+                minute: "12:02".to_string(),
+                input_tokens: 50,
+                output_tokens: 400,
+                total_tokens: 450,
+            },
+        ];
+        let data = prepare_token_flow_data(&flow);
+        assert_eq!(data.input_data.len(), 3);
+        assert_eq!(data.output_data.len(), 3);
+        // Max is output_tokens 400 from the 3rd point
+        assert_eq!(data.max_value, 400.0);
+        // Verify x-axis indices
+        assert_eq!(data.input_data[1].0, 1.0);
+        assert_eq!(data.output_data[2].0, 2.0);
+        // Verify values
+        assert_eq!(data.input_data[0].1, 100.0);
+        assert_eq!(data.output_data[2].1, 400.0);
+    }
+
+    #[test]
+    fn test_prepare_token_flow_max_never_zero() {
+        let flow = vec![TokenFlowPoint {
+            minute: "12:00".to_string(),
+            input_tokens: 0,
+            output_tokens: 0,
+            total_tokens: 0,
+        }];
+        let data = prepare_token_flow_data(&flow);
+        assert!(data.max_value >= 1.0, "max_value should be at least 1.0 to avoid division by zero");
     }
 }
