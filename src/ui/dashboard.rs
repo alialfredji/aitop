@@ -233,7 +233,14 @@ fn render_token_flow(f: &mut Frame, state: &AppState, theme: &Theme, area: ratat
     f.render_widget(block, area);
 
     let chart_data = prepare_token_flow_data(&state.token_flow);
-    let y_max = chart_data.max_value * 1.2;
+
+    // Stacked area: input on bottom, output on top
+    // y_max is based on max(input + output) so both fit
+    let stacked_max = state.token_flow.iter()
+        .map(|p| (p.input_tokens + p.output_tokens) as f64)
+        .fold(0.0f64, f64::max)
+        .max(1.0);
+    let y_max = stacked_max * 1.1;
 
     // Render filled braille area chart (btop-style)
     // Each braille character is a 2-col x 4-row dot grid
@@ -246,8 +253,8 @@ fn render_token_flow(f: &mut Frame, state: &AppState, theme: &Theme, area: ratat
         return;
     }
 
-    let dot_cols = w * 2;   // 2 dots per character column
-    let dot_rows = h * 4;   // 4 dots per character row
+    let dot_cols = w * 2;
+    let dot_rows = h * 4;
 
     // Interpolate data to fill the dot grid width
     let n = chart_data.input_data.len();
@@ -261,18 +268,16 @@ fn render_token_flow(f: &mut Frame, state: &AppState, theme: &Theme, area: ratat
         data[i].1 * (1.0 - t) + data[i + 1].1 * t
     };
 
-    // Build braille grid: for each character cell, compute which dots are filled
+    // Build braille grid
     let mut lines = Vec::with_capacity(h);
 
     for char_row in 0..h {
         let mut spans = Vec::new();
         for char_col in 0..w {
             let mut braille: u16 = 0x2800;
-
-            // Dot bit positions: [col][row] -> bit
             let dot_bits: [[u16; 4]; 2] = [
-                [0x01, 0x02, 0x04, 0x40],  // left column
-                [0x08, 0x10, 0x20, 0x80],  // right column
+                [0x01, 0x02, 0x04, 0x40],
+                [0x08, 0x10, 0x20, 0x80],
             ];
 
             let mut has_input = false;
@@ -285,21 +290,21 @@ fn render_token_flow(f: &mut Frame, state: &AppState, theme: &Theme, area: ratat
                 let input_val = interpolate(&chart_data.input_data, x);
                 let output_val = interpolate(&chart_data.output_data, x);
 
-                // Convert value to dot-row height (0 = bottom, dot_rows-1 = top)
+                // Stacked: input fills 0..input_height, output fills input_height..input_height+output_height
                 let input_height = if y_max > 0.0 { (input_val / y_max * dot_rows as f64).round() as usize } else { 0 };
                 let output_height = if y_max > 0.0 { (output_val / y_max * dot_rows as f64).round() as usize } else { 0 };
+                let total_height = input_height + output_height;
 
                 for (dr, &bit) in col_bits.iter().enumerate() {
-                    // This dot's position in the full grid (0 = top)
                     let grid_row = char_row * 4 + dr;
-                    // Convert to bottom-up: dot_rows-1 - grid_row
                     let from_bottom = dot_rows.saturating_sub(1).saturating_sub(grid_row);
 
                     if from_bottom < input_height {
+                        // In the input zone (bottom)
                         braille |= bit;
                         has_input = true;
-                    }
-                    if from_bottom < output_height {
+                    } else if from_bottom < total_height {
+                        // In the output zone (stacked on top of input)
                         braille |= bit;
                         has_output = true;
                     }
@@ -307,11 +312,14 @@ fn render_token_flow(f: &mut Frame, state: &AppState, theme: &Theme, area: ratat
             }
 
             let ch = char::from_u32(braille as u32).unwrap_or(' ');
-            // Color: input (secondary) takes priority, output (tertiary) when only output
-            let color = if has_input {
-                theme.secondary
-            } else if has_output {
+            // Color by dominant zone in this cell
+            let color = if has_output && !has_input {
                 theme.tertiary
+            } else if has_input && !has_output {
+                theme.secondary
+            } else if has_input && has_output {
+                // Mixed cell: use accent to show overlap boundary
+                theme.secondary
             } else {
                 theme.bar_empty
             };
