@@ -1,5 +1,6 @@
 # aitop
 
+[![Crates.io](https://img.shields.io/crates/v/aitop.svg)](https://crates.io/crates/aitop)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 **btop for AI** — a terminal dashboard for monitoring AI token usage, costs, and sessions.
