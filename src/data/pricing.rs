@@ -25,25 +25,52 @@ pub struct PricingRegistry {
 
 impl PricingRegistry {
     /// Create a registry with built-in pricing for all providers.
+    ///
+    /// Prices are per million tokens ($/MTok).
+    /// Cache read = 0.1x base input. Cache creation = 2x base input (1-hour cache,
+    /// which is what Claude Code uses — see `ephemeral_1h_input_tokens` in JSONL).
     pub fn builtin() -> Self {
-        // Anthropic models
-        let opus = ModelPrice {
+        // Anthropic — Opus 4.5 / 4.6 (reduced pricing)
+        let opus_new = ModelPrice {
+            input: 5.0,
+            output: 25.0,
+            cache_read: 0.50,
+            cache_creation: 10.0,
+        };
+        // Anthropic — Opus 4.0 / 4.1 (legacy pricing)
+        let opus_legacy = ModelPrice {
             input: 15.0,
             output: 75.0,
             cache_read: 1.50,
-            cache_creation: 18.75,
+            cache_creation: 30.0,
         };
-        let haiku = ModelPrice {
-            input: 0.80,
-            output: 4.0,
-            cache_read: 0.08,
-            cache_creation: 1.0,
-        };
+        // Anthropic — Sonnet (all versions: 3.7, 4, 4.5, 4.6)
         let sonnet = ModelPrice {
             input: 3.0,
             output: 15.0,
             cache_read: 0.30,
-            cache_creation: 3.75,
+            cache_creation: 6.0,
+        };
+        // Anthropic — Haiku 4.5
+        let haiku_45 = ModelPrice {
+            input: 1.0,
+            output: 5.0,
+            cache_read: 0.10,
+            cache_creation: 2.0,
+        };
+        // Anthropic — Haiku 3.5
+        let haiku_35 = ModelPrice {
+            input: 0.80,
+            output: 4.0,
+            cache_read: 0.08,
+            cache_creation: 1.60,
+        };
+        // Anthropic — Haiku 3 (deprecated)
+        let haiku_3 = ModelPrice {
+            input: 0.25,
+            output: 1.25,
+            cache_read: 0.03,
+            cache_creation: 0.50,
         };
 
         // Google Gemini models
@@ -51,25 +78,25 @@ impl PricingRegistry {
             input: 2.50,
             output: 15.00,
             cache_read: 0.625,
-            cache_creation: 3.125,
+            cache_creation: 5.0,
         };
         let gemini_25_pro = ModelPrice {
             input: 1.25,
             output: 10.00,
             cache_read: 0.3125,
-            cache_creation: 1.5625,
+            cache_creation: 2.50,
         };
         let gemini_25_flash = ModelPrice {
             input: 0.15,
             output: 0.60,
             cache_read: 0.0375,
-            cache_creation: 0.1875,
+            cache_creation: 0.30,
         };
         let gemini_20_flash = ModelPrice {
             input: 0.10,
             output: 0.40,
             cache_read: 0.025,
-            cache_creation: 0.125,
+            cache_creation: 0.20,
         };
 
         // OpenAI models
@@ -77,33 +104,42 @@ impl PricingRegistry {
             input: 2.50,
             output: 10.00,
             cache_read: 1.25,
-            cache_creation: 3.125,
+            cache_creation: 2.50,
         };
         let gpt_4o_mini = ModelPrice {
             input: 0.15,
             output: 0.60,
             cache_read: 0.075,
-            cache_creation: 0.1875,
+            cache_creation: 0.15,
         };
         let o3 = ModelPrice {
             input: 10.00,
             output: 40.00,
-            cache_read: 1.00,
-            cache_creation: 12.50,
+            cache_read: 2.50,
+            cache_creation: 10.00,
         };
         let o4_mini = ModelPrice {
             input: 1.10,
             output: 4.40,
             cache_read: 0.275,
-            cache_creation: 1.375,
+            cache_creation: 1.10,
         };
 
+        // Rules are matched first-match-wins by substring. Order matters:
+        // more specific patterns must come before general ones.
         let rules = vec![
-            // Anthropic
-            PricingRule { pattern: "claude-opus-4".into(), price: opus.clone() },
-            PricingRule { pattern: "opus".into(), price: opus },
-            PricingRule { pattern: "claude-3-5-haiku".into(), price: haiku.clone() },
-            PricingRule { pattern: "haiku".into(), price: haiku },
+            // Anthropic — Opus (specific versions before catch-all)
+            PricingRule { pattern: "claude-opus-4-6".into(), price: opus_new.clone() },
+            PricingRule { pattern: "claude-opus-4-5".into(), price: opus_new.clone() },
+            PricingRule { pattern: "claude-opus-4-1".into(), price: opus_legacy.clone() },
+            PricingRule { pattern: "claude-opus-4".into(), price: opus_legacy.clone() },
+            PricingRule { pattern: "opus".into(), price: opus_new },
+            // Anthropic — Haiku (specific versions before catch-all)
+            PricingRule { pattern: "claude-haiku-4-5".into(), price: haiku_45.clone() },
+            PricingRule { pattern: "claude-3-5-haiku".into(), price: haiku_35 },
+            PricingRule { pattern: "claude-3-haiku".into(), price: haiku_3 },
+            PricingRule { pattern: "haiku".into(), price: haiku_45 },
+            // Anthropic — Sonnet
             PricingRule { pattern: "claude-sonnet-4".into(), price: sonnet.clone() },
             PricingRule { pattern: "claude-3-7-sonnet".into(), price: sonnet.clone() },
             PricingRule { pattern: "sonnet".into(), price: sonnet.clone() },
@@ -187,28 +223,79 @@ mod tests {
     use super::*;
 
     #[test]
-    fn test_builtin_opus() {
+    fn test_opus_46_pricing() {
+        let reg = PricingRegistry::builtin();
+        let price = reg.lookup("claude-opus-4-6");
+        assert_eq!(price.input, 5.0);
+        assert_eq!(price.output, 25.0);
+        assert_eq!(price.cache_read, 0.50);
+        assert_eq!(price.cache_creation, 10.0);
+    }
+
+    #[test]
+    fn test_opus_45_pricing() {
+        let reg = PricingRegistry::builtin();
+        let price = reg.lookup("claude-opus-4-5-20251101");
+        assert_eq!(price.input, 5.0);
+        assert_eq!(price.output, 25.0);
+    }
+
+    #[test]
+    fn test_opus_4_legacy_pricing() {
         let reg = PricingRegistry::builtin();
         let price = reg.lookup("claude-opus-4-20250514");
         assert_eq!(price.input, 15.0);
         assert_eq!(price.output, 75.0);
         assert_eq!(price.cache_read, 1.50);
-        assert_eq!(price.cache_creation, 18.75);
+        assert_eq!(price.cache_creation, 30.0);
     }
 
     #[test]
-    fn test_builtin_opus_short() {
+    fn test_opus_41_legacy_pricing() {
+        let reg = PricingRegistry::builtin();
+        let price = reg.lookup("claude-opus-4-1-20250805");
+        assert_eq!(price.input, 15.0);
+        assert_eq!(price.output, 75.0);
+    }
+
+    #[test]
+    fn test_bare_opus_uses_new_pricing() {
         let reg = PricingRegistry::builtin();
         let price = reg.lookup("opus");
-        assert_eq!(price.input, 15.0);
+        assert_eq!(price.input, 5.0);
     }
 
     #[test]
-    fn test_builtin_haiku() {
+    fn test_haiku_45_pricing() {
+        let reg = PricingRegistry::builtin();
+        let price = reg.lookup("claude-haiku-4-5-20251001");
+        assert_eq!(price.input, 1.0);
+        assert_eq!(price.output, 5.0);
+        assert_eq!(price.cache_read, 0.10);
+        assert_eq!(price.cache_creation, 2.0);
+    }
+
+    #[test]
+    fn test_haiku_35_pricing() {
         let reg = PricingRegistry::builtin();
         let price = reg.lookup("claude-3-5-haiku-20241022");
         assert_eq!(price.input, 0.80);
         assert_eq!(price.output, 4.0);
+    }
+
+    #[test]
+    fn test_haiku_3_pricing() {
+        let reg = PricingRegistry::builtin();
+        let price = reg.lookup("claude-3-haiku-20240307");
+        assert_eq!(price.input, 0.25);
+        assert_eq!(price.output, 1.25);
+    }
+
+    #[test]
+    fn test_bare_haiku_uses_45_pricing() {
+        let reg = PricingRegistry::builtin();
+        let price = reg.lookup("haiku");
+        assert_eq!(price.input, 1.0);
     }
 
     #[test]
@@ -217,6 +304,8 @@ mod tests {
         let price = reg.lookup("claude-sonnet-4-6-20250514");
         assert_eq!(price.input, 3.0);
         assert_eq!(price.output, 15.0);
+        assert_eq!(price.cache_read, 0.30);
+        assert_eq!(price.cache_creation, 6.0);
     }
 
     #[test]
@@ -246,19 +335,19 @@ mod tests {
         assert_eq!(price.input, 1.25);
         assert_eq!(price.output, 10.00);
         assert_eq!(price.cache_read, 0.3125);
-        assert_eq!(price.cache_creation, 1.5625);
+        assert_eq!(price.cache_creation, 2.50);
 
         let price = reg.lookup("gemini-2.5-flash");
         assert_eq!(price.input, 0.15);
         assert_eq!(price.output, 0.60);
         assert_eq!(price.cache_read, 0.0375);
-        assert_eq!(price.cache_creation, 0.1875);
+        assert_eq!(price.cache_creation, 0.30);
 
         let price = reg.lookup("gemini-2.0-flash");
         assert_eq!(price.input, 0.10);
         assert_eq!(price.output, 0.40);
         assert_eq!(price.cache_read, 0.025);
-        assert_eq!(price.cache_creation, 0.125);
+        assert_eq!(price.cache_creation, 0.20);
     }
 
     #[test]
@@ -269,25 +358,25 @@ mod tests {
         assert_eq!(price.input, 2.50);
         assert_eq!(price.output, 10.00);
         assert_eq!(price.cache_read, 1.25);
-        assert_eq!(price.cache_creation, 3.125);
+        assert_eq!(price.cache_creation, 2.50);
 
         let price = reg.lookup("gpt-4o-mini");
         assert_eq!(price.input, 0.15);
         assert_eq!(price.output, 0.60);
         assert_eq!(price.cache_read, 0.075);
-        assert_eq!(price.cache_creation, 0.1875);
+        assert_eq!(price.cache_creation, 0.15);
 
         let price = reg.lookup("o3");
         assert_eq!(price.input, 10.00);
         assert_eq!(price.output, 40.00);
-        assert_eq!(price.cache_read, 1.00);
-        assert_eq!(price.cache_creation, 12.50);
+        assert_eq!(price.cache_read, 2.50);
+        assert_eq!(price.cache_creation, 10.00);
 
         let price = reg.lookup("o4-mini");
         assert_eq!(price.input, 1.10);
         assert_eq!(price.output, 4.40);
         assert_eq!(price.cache_read, 0.275);
-        assert_eq!(price.cache_creation, 1.375);
+        assert_eq!(price.cache_creation, 1.10);
     }
 
     #[test]
@@ -298,7 +387,14 @@ mod tests {
     }
 
     #[test]
-    fn test_compute_cost_opus_output_only() {
+    fn test_compute_cost_opus_46_output_only() {
+        let reg = PricingRegistry::builtin();
+        let cost = reg.compute_cost("claude-opus-4-6", 0, 1_000_000, 0, 0);
+        assert!((cost - 25.0).abs() < 0.001);
+    }
+
+    #[test]
+    fn test_compute_cost_opus_4_legacy_output() {
         let reg = PricingRegistry::builtin();
         let cost = reg.compute_cost("claude-opus-4-20250514", 0, 1_000_000, 0, 0);
         assert!((cost - 75.0).abs() < 0.001);
