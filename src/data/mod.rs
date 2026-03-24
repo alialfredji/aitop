@@ -4,6 +4,7 @@ pub mod scanner;
 pub mod parser;
 pub mod gemini;
 pub mod openclaw;
+pub mod opencode;
 pub mod db;
 pub mod watcher;
 pub mod aggregator;

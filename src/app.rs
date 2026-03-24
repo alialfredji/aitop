@@ -57,6 +57,61 @@ pub enum SessionSort {
     Recent,
 }
 
+const PROVIDER_CYCLE: &[&str] = &["claude", "opencode", "gemini", "openclaw"];
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ProviderFilter {
+    All,
+    Single(String),
+}
+
+impl ProviderFilter {
+    pub fn cycle_forward(&self) -> Self {
+        match self {
+            ProviderFilter::All => ProviderFilter::Single(PROVIDER_CYCLE[0].to_string()),
+            ProviderFilter::Single(p) => {
+                let pos = PROVIDER_CYCLE.iter().position(|&s| s == p.as_str());
+                match pos {
+                    Some(i) if i + 1 < PROVIDER_CYCLE.len() => {
+                        ProviderFilter::Single(PROVIDER_CYCLE[i + 1].to_string())
+                    }
+                    _ => ProviderFilter::All,
+                }
+            }
+        }
+    }
+
+    pub fn cycle_backward(&self) -> Self {
+        match self {
+            ProviderFilter::All => {
+                ProviderFilter::Single(PROVIDER_CYCLE[PROVIDER_CYCLE.len() - 1].to_string())
+            }
+            ProviderFilter::Single(p) => {
+                let pos = PROVIDER_CYCLE.iter().position(|&s| s == p.as_str());
+                match pos {
+                    Some(0) => ProviderFilter::All,
+                    Some(i) => ProviderFilter::Single(PROVIDER_CYCLE[i - 1].to_string()),
+                    None => ProviderFilter::All,
+                }
+            }
+        }
+    }
+
+    pub fn as_option(&self) -> Option<&str> {
+        match self {
+            ProviderFilter::All => None,
+            ProviderFilter::Single(p) => Some(p.as_str()),
+        }
+    }
+
+    pub fn label(&self) -> &str {
+        match self {
+            ProviderFilter::All => "all",
+            ProviderFilter::Single(p) => p.as_str(),
+        }
+    }
+}
+
 pub struct AppState {
     pub view: View,
     pub show_help: bool,
@@ -83,6 +138,8 @@ pub struct AppState {
     pub filter_text: String,
     pub filter_active: bool,
     pub filtered_sessions: Vec<SessionSummary>,
+    pub filtered_models: Vec<ModelStats>,
+    pub filtered_activity: Vec<ActivityEntry>,
 
     // Sparklines
     pub session_sparklines: HashMap<String, Vec<f64>>,
@@ -133,6 +190,7 @@ pub struct AppState {
     // Control
     pub should_quit: bool,
     pub needs_refresh: bool,
+    pub provider_filter: ProviderFilter,
 }
 
 impl AppState {
@@ -170,6 +228,8 @@ impl AppState {
             filter_text: String::new(),
             filter_active: false,
             filtered_sessions: Vec::new(),
+            filtered_models: Vec::new(),
+            filtered_activity: Vec::new(),
 
             session_sparklines: HashMap::new(),
 
@@ -209,6 +269,7 @@ impl AppState {
 
             should_quit: false,
             needs_refresh: true,
+            provider_filter: ProviderFilter::All,
         }
     }
 
@@ -344,17 +405,30 @@ impl AppState {
     }
 
     pub fn apply_filter(&mut self) {
-        if self.filter_text.is_empty() {
-            self.filtered_sessions = self.sessions.clone();
-        } else {
-            let lower = self.filter_text.to_lowercase();
-            self.filtered_sessions = self
-                .sessions
-                .iter()
-                .filter(|s| s.project.to_lowercase().contains(&lower))
-                .cloned()
-                .collect();
-        }
+        let provider = self.provider_filter.as_option().map(|s| s.to_string());
+
+        self.filtered_sessions = self.sessions.iter().filter(|s| {
+            let text_ok = if self.filter_text.is_empty() {
+                true
+            } else {
+                s.project.to_lowercase().contains(&self.filter_text.to_lowercase())
+            };
+            let provider_ok = match &provider {
+                None => true,
+                Some(p) => s.provider.to_lowercase() == p.as_str(),
+            };
+            text_ok && provider_ok
+        }).cloned().collect();
+
+        self.filtered_models = match &provider {
+            None => self.models.clone(),
+            Some(p) => self.models.iter().filter(|m| m.provider.to_lowercase() == p.as_str()).cloned().collect(),
+        };
+
+        self.filtered_activity = match &provider {
+            None => self.activity.clone(),
+            Some(p) => self.activity.iter().filter(|a| a.provider.to_lowercase() == p.as_str()).cloned().collect(),
+        };
     }
 
     pub fn displayed_sessions(&self) -> &[SessionSummary] {

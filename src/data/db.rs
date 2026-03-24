@@ -430,4 +430,54 @@ impl Database {
         )?;
         self.ingest_parsed(&file.path, session.as_ref(), &messages)
     }
+
+    /// Ingest all sessions from the OpenCode SQLite database.
+    /// Uses INSERT OR IGNORE for idempotency — safe to call on every poll tick.
+    pub fn ingest_opencode_sessions(&self, db_path: &Path) -> Result<()> {
+        let sessions = super::opencode::parse_opencode_db(db_path, &self.pricing)?;
+
+        let tx = self.conn.unchecked_transaction()?;
+
+        for (session, messages) in &sessions {
+            tx.execute(
+                "INSERT INTO sessions (id, project, started_at, updated_at, model, version, provider)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
+                 ON CONFLICT(id) DO UPDATE SET
+                    updated_at = MAX(sessions.updated_at, ?4),
+                    model = COALESCE(?5, sessions.model)",
+                params![
+                    session.id,
+                    session.project,
+                    session.started_at,
+                    session.updated_at,
+                    session.model,
+                    session.version,
+                    session.provider,
+                ],
+            )?;
+
+            for m in messages {
+                tx.execute(
+                    "INSERT OR IGNORE INTO messages (id, session_id, type, timestamp, model, input_tokens, output_tokens, cache_read, cache_creation, cost_usd, provider)
+                     VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11)",
+                    params![
+                        m.uuid,
+                        m.session_id,
+                        m.msg_type,
+                        m.timestamp,
+                        m.model,
+                        m.input_tokens,
+                        m.output_tokens,
+                        m.cache_read,
+                        m.cache_creation,
+                        m.cost_usd,
+                        m.provider,
+                    ],
+                )?;
+            }
+        }
+
+        tx.commit()?;
+        Ok(())
+    }
 }

@@ -128,27 +128,33 @@ impl PricingRegistry {
         // Rules are matched first-match-wins by substring. Order matters:
         // more specific patterns must come before general ones.
         let rules = vec![
-            // Anthropic — Opus (specific versions before catch-all)
+            // Anthropic — Opus (dot-variants from OpenCode must precede dash-variants)
+            PricingRule { pattern: "claude-opus-4.6".into(), price: opus_new.clone() },
+            PricingRule { pattern: "claude-opus-4.5".into(), price: opus_new.clone() },
             PricingRule { pattern: "claude-opus-4-6".into(), price: opus_new.clone() },
             PricingRule { pattern: "claude-opus-4-5".into(), price: opus_new.clone() },
             PricingRule { pattern: "claude-opus-4-1".into(), price: opus_legacy.clone() },
             PricingRule { pattern: "claude-opus-4".into(), price: opus_legacy.clone() },
             PricingRule { pattern: "opus".into(), price: opus_new },
-            // Anthropic — Haiku (specific versions before catch-all)
+            // Anthropic — Haiku (dot-variants from OpenCode must precede dash-variants)
+            PricingRule { pattern: "claude-haiku-4.5".into(), price: haiku_45.clone() },
             PricingRule { pattern: "claude-haiku-4-5".into(), price: haiku_45.clone() },
             PricingRule { pattern: "claude-3-5-haiku".into(), price: haiku_35 },
             PricingRule { pattern: "claude-3-haiku".into(), price: haiku_3 },
             PricingRule { pattern: "haiku".into(), price: haiku_45 },
-            // Anthropic — Sonnet
+            // Anthropic — Sonnet (dot-variant claude-sonnet-4.5/4.6 already matched by "claude-sonnet-4")
             PricingRule { pattern: "claude-sonnet-4".into(), price: sonnet.clone() },
             PricingRule { pattern: "claude-3-7-sonnet".into(), price: sonnet.clone() },
             PricingRule { pattern: "sonnet".into(), price: sonnet.clone() },
             // Gemini
             PricingRule { pattern: "gemini-3-pro".into(), price: gemini_3_pro },
+            PricingRule { pattern: "gemini-3-flash".into(), price: gemini_25_flash.clone() },
             PricingRule { pattern: "gemini-2.5-pro".into(), price: gemini_25_pro },
             PricingRule { pattern: "gemini-2.5-flash".into(), price: gemini_25_flash },
             PricingRule { pattern: "gemini-2.0-flash".into(), price: gemini_20_flash },
-            // OpenAI
+            // OpenAI / GitHub Copilot models
+            PricingRule { pattern: "gpt-5.2-codex".into(), price: gpt_4o.clone() },
+            PricingRule { pattern: "grok-code-fast".into(), price: gpt_4o_mini.clone() },
             PricingRule { pattern: "gpt-4o-mini".into(), price: gpt_4o_mini },
             PricingRule { pattern: "gpt-4o".into(), price: gpt_4o },
             PricingRule { pattern: "o4-mini".into(), price: o4_mini },

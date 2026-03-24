@@ -20,7 +20,7 @@ pub fn render_models(f: &mut Frame, state: &AppState, theme: &Theme) {
     let inner = block.inner(area);
     f.render_widget(block, area);
 
-    if state.models.is_empty() {
+    if state.filtered_models.is_empty() {
         f.render_widget(
             Paragraph::new("  No model data yet. Start using Claude Code to see stats here.")
                 .style(Style::default().fg(theme.text_dim)),
@@ -29,14 +29,14 @@ pub fn render_models(f: &mut Frame, state: &AppState, theme: &Theme) {
         return;
     }
 
-    let total_cost: f64 = state.models.iter().map(|m| m.cost).sum();
-    let max_cost = state.models.iter().map(|m| m.cost).fold(0.0f64, f64::max);
+    let total_cost: f64 = state.filtered_models.iter().map(|m| m.cost).sum();
+    let max_cost = state.filtered_models.iter().map(|m| m.cost).fold(0.0f64, f64::max);
     let bar_width = (inner.width as usize).saturating_sub(20);
 
     // Allocate vertical space per model (4 lines each + 1 blank)
     let mut lines = Vec::new();
 
-    for model in &state.models {
+    for model in &state.filtered_models {
         let short_name = shorten_model(&model.model);
         let pct = if total_cost > 0.0 {
             model.cost / total_cost * 100.0
@@ -112,7 +112,7 @@ pub fn render_models(f: &mut Frame, state: &AppState, theme: &Theme) {
         Span::styled(
             format!(
                 "  across {} models",
-                state.models.len()
+                state.filtered_models.len()
             ),
             Style::default().fg(theme.text_dim),
         ),

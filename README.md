@@ -24,10 +24,11 @@ Like `btop` monitors your system resources, `aitop` monitors your AI spend. Buil
 
 - **Live TUI dashboard** with btop-style keyboard shortcuts and highlighted shortcut letters
 - **4 views**: Dashboard, Sessions, Models, Trends — switch with `d`/`s`/`m`/`t`
-- **Multi-provider** — reads Claude Code, Gemini CLI, and OpenClaw session files
+- **Multi-provider** — reads Claude Code, OpenCode, Gemini CLI, and OpenClaw session files
 - **Zero auth required** — reads local session files directly, no API keys needed
 - **SQLite-backed** — indexes once, instant startup after first run
 - **Live file watching** — detects new session data in real-time with fs watcher
+- **Provider filter** — press `f`/`F` to cycle through providers (all → claude → opencode → gemini → openclaw)
 - **Burn rate tracking** — see your $/hr, daily spend, weekly totals at a glance
 - **Budget gauge** — visual progress bar with color thresholds when budget is configured
 - **Model breakdown** — cost, tokens, and cache hit ratio per model
@@ -103,6 +104,7 @@ aitop --refresh 5
 | `Enter` | Open session detail popup |
 | `Esc` | Close popup / dismiss banner |
 | `/` | Filter sessions by project |
+| `f`/`F` | Cycle provider filter forward/backward |
 | `c`/`n`/`o`/`u` | Sort by cost/tokens/project/recent |
 | `a` | Toggle sort ascending/descending |
 | `w`/`W`/`A` | Trend range: week/month/all |
@@ -113,7 +115,7 @@ aitop --refresh 5
 
 ## How It Works
 
-`aitop` reads session files from Claude Code, Gemini CLI, and OpenClaw, and indexes them into a local SQLite database. Token costs are computed using built-in pricing (extensible via config). The database is incrementally updated — only new data is parsed on subsequent runs. Zero network calls.
+`aitop` reads session files from Claude Code, OpenCode, Gemini CLI, and OpenClaw, and indexes them into a local SQLite database. Token costs are computed using built-in pricing (extensible via config). The database is incrementally updated — only new data is parsed on subsequent runs. Zero network calls.
 
 ## Configuration
 

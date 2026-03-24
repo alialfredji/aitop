@@ -356,24 +356,22 @@ fn render_model_breakdown(f: &mut Frame, state: &AppState, theme: &Theme, area: 
     let inner = block.inner(sub_areas.0);
     f.render_widget(block, sub_areas.0);
 
-    if state.models.is_empty() {
+    if state.filtered_models.is_empty() {
         f.render_widget(
             Paragraph::new("  No data yet").style(Style::default().fg(theme.text_dim)),
             inner,
         );
     } else {
-        let max_cost = state.models.iter().map(|m| m.cost).fold(0.0f64, f64::max);
-        // Compute model name column width dynamically
-        let name_col = state.models.iter()
+        let max_cost = state.filtered_models.iter().map(|m| m.cost).fold(0.0f64, f64::max);
+        let name_col = state.filtered_models.iter()
             .map(|m| shorten_model(&m.model).len())
             .max()
             .unwrap_or(10)
             .max(10);
-        // 2 (indent) + name_col + 1 (space) + cost ~12 chars = overhead
         let bar_width = (inner.width as usize).saturating_sub(name_col + 16);
 
         let mut lines = Vec::new();
-        for model in &state.models {
+        for model in &state.filtered_models {
             let short_name = shorten_model(&model.model);
             let bar_len = if max_cost > 0.0 {
                 ((model.cost / max_cost) * bar_width as f64) as usize
@@ -521,7 +519,7 @@ fn render_activity_feed(f: &mut Frame, state: &AppState, theme: &Theme, area: ra
     f.render_widget(block, area);
 
     let rows: Vec<Row> = state
-        .activity
+        .filtered_activity
         .iter()
         .take(inner.height as usize)
         .map(|a| {

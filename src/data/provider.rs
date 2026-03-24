@@ -6,6 +6,7 @@ pub enum Provider {
     Claude,
     Gemini,
     OpenClaw,
+    OpenCode,
 }
 
 impl fmt::Display for Provider {
@@ -14,24 +15,44 @@ impl fmt::Display for Provider {
             Provider::Claude => write!(f, "claude"),
             Provider::Gemini => write!(f, "gemini"),
             Provider::OpenClaw => write!(f, "openclaw"),
+            Provider::OpenCode => write!(f, "opencode"),
         }
     }
 }
 
 impl Provider {
     /// Returns the default data directory for this provider.
+    /// For OpenCode, returns the path to the SQLite database file.
     pub fn default_dir(&self) -> PathBuf {
         let home = dirs::home_dir().unwrap_or_else(|| PathBuf::from("."));
         match self {
             Provider::Claude => home.join(".claude").join("projects"),
             Provider::Gemini => home.join(".gemini").join("tmp"),
             Provider::OpenClaw => home.join(".openclaw").join("agents"),
+            Provider::OpenCode => {
+                let primary = home
+                    .join(".local")
+                    .join("share")
+                    .join("opencode")
+                    .join("opencode.db");
+                let fallback = home.join(".opencode").join("opencode.db");
+                if primary.exists() {
+                    primary
+                } else {
+                    fallback
+                }
+            }
         }
     }
 
     /// All providers that aitop can scan.
     pub fn all() -> &'static [Provider] {
-        &[Provider::Claude, Provider::Gemini, Provider::OpenClaw]
+        &[
+            Provider::Claude,
+            Provider::Gemini,
+            Provider::OpenClaw,
+            Provider::OpenCode,
+        ]
     }
 }
 
@@ -52,6 +73,7 @@ mod tests {
         assert_eq!(Provider::Claude.to_string(), "claude");
         assert_eq!(Provider::Gemini.to_string(), "gemini");
         assert_eq!(Provider::OpenClaw.to_string(), "openclaw");
+        assert_eq!(Provider::OpenCode.to_string(), "opencode");
     }
 
     #[test]
@@ -67,14 +89,22 @@ mod tests {
         let openclaw_dir = Provider::OpenClaw.default_dir();
         assert!(openclaw_dir.to_string_lossy().ends_with(".openclaw/agents")
             || openclaw_dir.to_string_lossy().ends_with(".openclaw\\agents"));
+
+        let opencode_dir = Provider::OpenCode.default_dir();
+        let s = opencode_dir.to_string_lossy();
+        assert!(
+            s.contains("opencode"),
+            "OpenCode path should contain 'opencode', got: {s}"
+        );
     }
 
     #[test]
     fn test_provider_all() {
         let all = Provider::all();
-        assert_eq!(all.len(), 3);
+        assert_eq!(all.len(), 4);
         assert_eq!(all[0], Provider::Claude);
         assert_eq!(all[1], Provider::Gemini);
         assert_eq!(all[2], Provider::OpenClaw);
+        assert_eq!(all[3], Provider::OpenCode);
     }
 }

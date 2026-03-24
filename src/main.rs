@@ -89,6 +89,9 @@ fn main() -> Result<()> {
     let openclaw_dir = Provider::OpenClaw.default_dir();
     let openclaw_files = scan_openclaw_sessions(&openclaw_dir).unwrap_or_default();
 
+    // OpenCode DB path (no file scan — ingest directly from SQLite)
+    let opencode_db_path = Provider::OpenCode.default_dir();
+
     let total_files = claude_files.len() + gemini_files.len() + openclaw_files.len();
     if total_files > 0 {
         eprint!("\r  Indexing sessions... (parsing {} files)", total_files);
@@ -159,6 +162,13 @@ fn main() -> Result<()> {
         io::stderr().flush().ok();
     }
 
+    // Ingest OpenCode sessions (SQLite — separate from file-based providers)
+    if opencode_db_path.exists() {
+        if let Err(e) = db.ingest_opencode_sessions(&opencode_db_path) {
+            eprintln!("Warning: failed to ingest OpenCode sessions: {}", e);
+        }
+    }
+
     if args.light {
         drop(db);
         return print_light_mode(&db_path, pricing);
@@ -169,7 +179,7 @@ fn main() -> Result<()> {
         return print_tmux_status(&db_path);
     }
 
-    run_tui(config, db, &db_path, &projects_dir, pricing)
+    run_tui(config, db, &db_path, &projects_dir, pricing, &opencode_db_path)
 }
 
 fn print_light_mode(db_path: &std::path::Path, pricing: PricingRegistry) -> Result<()> {
@@ -232,6 +242,7 @@ fn run_tui(
     db_path: &std::path::Path,
     projects_dir: &std::path::Path,
     pricing: PricingRegistry,
+    opencode_db_path: &std::path::Path,
 ) -> Result<()> {
     enable_raw_mode()?;
     let mut stdout = io::stdout();
@@ -297,7 +308,7 @@ fn run_tui(
     });
 
     let result = run_event_loop(
-        &mut terminal, &mut state, &write_db, &agg, &mut theme, &watcher_rx,
+        &mut terminal, &mut state, &write_db, &agg, &mut theme, &watcher_rx, opencode_db_path,
     );
 
     // Save last_checked_at on quit
@@ -320,10 +331,13 @@ fn run_event_loop(
     agg: &Aggregator,
     theme: &mut ui::theme::Theme,
     watcher_rx: &mpsc::Receiver<String>,
+    opencode_db_path: &std::path::Path,
 ) -> Result<()> {
     let mut last_refresh = Instant::now();
     let mut last_replay_tick = Instant::now();
+    let mut last_opencode_poll = Instant::now();
     let max_refresh_interval = Duration::from_secs(30);
+    let opencode_poll_interval = Duration::from_secs(30);
     let debounce_interval = Duration::from_millis(500);
 
     loop {
@@ -459,6 +473,14 @@ fn run_event_loop(
             last_refresh = Instant::now();
         }
 
+        // Poll OpenCode SQLite every 30s (INSERT OR IGNORE is idempotent)
+        if last_opencode_poll.elapsed() >= opencode_poll_interval {
+            if opencode_db_path.exists() {
+                let _ = write_db.ingest_opencode_sessions(opencode_db_path);
+            }
+            last_opencode_poll = Instant::now();
+        }
+
         if state.needs_refresh {
             state.refresh_data(agg);
             last_refresh = Instant::now();
@@ -517,6 +539,14 @@ fn handle_key(
 
         KeyCode::Char('?') | KeyCode::F(1) => state.show_help = true,
         KeyCode::Char('r') => state.needs_refresh = true,
+        KeyCode::Char('f') if !state.filter_active => {
+            state.provider_filter = state.provider_filter.cycle_forward();
+            state.apply_filter();
+        }
+        KeyCode::Char('F') if !state.filter_active => {
+            state.provider_filter = state.provider_filter.cycle_backward();
+            state.apply_filter();
+        }
         KeyCode::Char('\\') => state.toggle_split(),
         KeyCode::Char('/') => {
             state.filter_active = true;
@@ -811,14 +841,16 @@ fn render_status_bar(
 
     let left_text = if flash_active {
         format!(
-            "Copied! \u{2502} aitop v{} \u{2502} {} sessions \u{2502} ${:.2} all-time",
+            "Copied! \u{2502} aitop v{} \u{2502} [{}] \u{2502} {} sessions \u{2502} ${:.2} all-time",
             env!("CARGO_PKG_VERSION"),
+            state.provider_filter.label(),
             state.dashboard.total_sessions, state.dashboard.spend_all_time
         )
     } else {
         format!(
-            "aitop v{} \u{2502} {} sessions \u{2502} ${:.2} all-time",
+            "aitop v{} \u{2502} [{}] \u{2502} {} sessions \u{2502} ${:.2} all-time",
             env!("CARGO_PKG_VERSION"),
+            state.provider_filter.label(),
             state.dashboard.total_sessions, state.dashboard.spend_all_time
         )
     };
@@ -836,10 +868,10 @@ fn render_status_bar(
         format!("theme: {}  (p to cycle)", theme.name)
     } else {
         match state.view {
-            View::Dashboard => "d:dashboard  s:sessions  m:models  t:trends  ?:help  p:theme".to_string(),
-            View::Sessions => "j/k:navigate  c:cost  n:tokens  p:project  u:updated  /:filter  ?:help".to_string(),
-            View::Models => "d:dashboard  s:sessions  t:trends  p:theme  ?:help".to_string(),
-            View::Trends => "w:week  o:month  a:all  b:bar/line  n:tokens  \u{2190}\u{2192}:cycle  p:theme  ?:help".to_string(),
+            View::Dashboard => "d:dashboard  s:sessions  m:models  t:trends  f/F:filter  ?:help  p:theme".to_string(),
+            View::Sessions => "j/k:navigate  c:cost  n:tokens  p:project  u:updated  /:search  f/F:filter  ?:help".to_string(),
+            View::Models => "d:dashboard  s:sessions  t:trends  f/F:filter  p:theme  ?:help".to_string(),
+            View::Trends => "w:week  o:month  a:all  b:bar/line  n:tokens  f/F:filter  \u{2190}\u{2192}:cycle  p:theme  ?:help".to_string(),
         }
     };
 
